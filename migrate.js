@@ -1,4 +1,4 @@
-//@flow
+// @flow
 
 // const s3 = require('s3');
 const request = require('request-promise-native');

@@ -1,5 +1,4 @@
 [ignore]
-.*/node_modules/.*
 
 [include]
 
@@ -9,6 +8,5 @@ flow-typed
 [lints]
 
 [options]
-all=true
 
 [strict]
