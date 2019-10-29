@@ -1,0 +1,35 @@
+{
+  "name": "websites-dev",
+  "version": "1.0.0",
+  "description": "",
+  "main": "",
+  "dependencies": {
+    "@directus/sdk-js": "^6.0.0-alpha.11",
+    "axios": "^0.19.0",
+    "axois": "0.0.1-security"
+  },
+  "devDependencies": {
+    "cheerio": "^1.0.0-rc.3",
+    "cjs-module": "^1.5.0",
+    "form-data": "^2.5.1",
+    "gatsby-cli": "^2.8.5",
+    "mysql2": "^2.0.0",
+    "react": "^16.11.0",
+    "request": "^2.88.0",
+    "s3": "^4.4.0",
+    "yargs": "^14.2.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jacobrienstra/websites-dev.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jacobrienstra/websites-dev/issues"
+  },
+  "homepage": "https://github.com/jacobrienstra/websites-dev#readme"
+}
