@@ -1,15 +1,34 @@
 // const s3 = require('s3');
-const request = require('request');
+const request = require('request-promise-native');
 const fs = require('fs');
 const yargs = require('yargs');
 const cheerio = require('cheerio');
+const mysql2 = require('mysql2/promise');
 
-function processDrupalPublicImageUri(uri) {
-  return [
-    uri.replace('public://', 'http://satirev.org/sites/default/files/'),
-    uri.replace(/^.*(\\|\/|\:)/, ''),
-  ];
-}
+const argv = yargs
+  .option('db', {
+    alias: 'd',
+    description: 'The database to query from',
+    type: 'string',
+  })
+  .option('password', {
+    alias: 'p',
+    description: 'The password to the database to query from',
+    type: 'string',
+  })
+  .help()
+  .alias('help', 'h')
+  .demandOption(
+    ['db', 'password'],
+    'Please provide database name and password. Assumed to be running on localhost, user root, port 3306 (MySQL)'
+  ).argv;
+
+const dbOptions = {
+  host: 'localhost',
+  user: 'root',
+  database: argv.db,
+  password: argv.password,
+};
 
 // function getAWSClient() {
 //   return s3.createClient({
@@ -20,55 +39,24 @@ function processDrupalPublicImageUri(uri) {
 //   });
 // }
 
-function uploadImageDirectus([uri, name]) {
-  const key = 'site/images/' + name;
-  var options = {
-    uri: uri,
-    encoding: null,
-    headers: {
-      'user-agent': 'node.js',
-    },
-  };
-  request(options, function(error, response, body) {
-    if (error || response.statusCode !== 200) {
-      console.log('failed to get image');
-      console.log(error);
-    } else {
-      request(
-        {
-          method: 'POST',
-          url: 'http://admin.satirev.org/_/files',
-          project: '_',
-          auth: {
-            bearer: 'idrdhjfrhcvdbedekjhfvjdbuuelhece',
-          },
-          formData: {
-            filename: name,
-            data: Buffer.from(body).toString('base64'),
-          },
-          json: true,
-        },
-        function(error, res, content) {
-          if (error || response.statusCode !== 200) {
-            console.log('failed to get upload image');
-            console.log(error);
-          }
-          return { full_url: content.data.data.full_url, id: content.data.id };
-        }
-      );
-    }
-  });
+function sanitizeUri(uri) {
+  return uri.replace(/[^0-9a-zA-Z\-]/, '');
 }
 
-async function fetchDrupalDatabase(database_name, database_pwd) {
-  const mysql2 = require('mysql2/promise');
-  const db = await mysql2.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: database_pwd,
-    database: database_name,
-  });
+function getFileNameFromPath(uri) {
+  return uri.replace(/^.*(\\|\/|\:)/, '');
+}
 
+const catchAwait = async awaitable => {
+  try {
+    return await awaitable;
+  } catch (e) {
+    throw e;
+  }
+};
+
+async function fetchDrupalDatabase() {
+  const db = await mysql2.createConnection(dbOptions);
   var [nodes, _] = await db.query(
     `SELECT
       n.nid,
@@ -122,29 +110,134 @@ async function fetchDrupalDatabase(database_name, database_pwd) {
     ['article', 'node']
   );
   nodes = JSON.parse(JSON.stringify(nodes));
-
-  const $ = cheerio.load(nodes[0].body);
-  console.log($('img'));
   await db.end();
   return nodes;
 }
 
-const argv = yargs
-  .option('db', {
-    alias: 'd',
-    description: 'The database to query from',
-    type: 'string',
-  })
-  .option('password', {
-    alias: 'p',
-    description: 'The password to the database to query from',
-    type: 'string',
-  })
-  .help()
-  .alias('help', 'h')
-  .demandOption(
-    ['db', 'password'],
-    'Please provide database name and password. Assumed to be running on localhost, user root, port 3306 (MySQL)'
-  ).argv;
+function parseDrupalPublicImageUri(localUri) {
+  return {
+    fullUri: localUri.replace(
+      'public://',
+      'http://satirev.org/sites/default/files/'
+    ),
+    fileNameExisting: getFileNameFromPath(localUri),
+  };
+}
 
-fetchDrupalDatabase(argv.db, argv.password);
+async function downloadImageFromDrupal(fullUri) {
+  const options = {
+    uri: fullUri,
+    encoding: null,
+    headers: {
+      'user-agent': 'node.js',
+    },
+  };
+  return await request(options);
+}
+
+async function uploadImageToDirectus(imageBase64, fileName) {
+  const options = {
+    method: 'POST',
+    url: 'http://admin.satirev.org/_/files',
+    project: '_',
+    auth: {
+      // static auth token
+      bearer: 'idrdhjfrhcvdbedekjhfvjdbuuelhece',
+    },
+    formData: {
+      filename: fileName,
+      data: imageBase64,
+    },
+    json: true,
+  };
+  const content = await request(options);
+  // return url for sourcing
+  // and id for database linking
+  return { fullUri: content.data.data.full_url, imageID: content.data.id };
+}
+
+function findFID(obj) {
+  if (obj === null || typeof obj != 'object') return null;
+  var res = null;
+  for (key of Object.keys(obj)) {
+    if (key === 'fid') res = obj[key];
+    else res = res || findFID(obj[key]);
+  }
+  return res;
+}
+
+async function genManagedFileImageTag(fileObj) {
+  const fid = findFID(fileObj);
+  const db = await mysql2.createConnection(dbOptions);
+  const [nodes, _] = await db.query(
+    `SELECT uri FROM file_managed WHERE fid = ?`,
+    [fid]
+  );
+  await db.end();
+  return '<img src="' + encodeURI(nodes[0].uri) + '" />';
+}
+
+async function convertManagedToPublicFiles(htmlBody) {
+  const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
+  const promises = managedFiles.map(async fileObjStr => {
+    let fileObj = JSON.parse(fileObjStr);
+    let repl = await genManagedFileImageTag(fileObj);
+    htmlBody = htmlBody.replace(fileObjStr, repl);
+  });
+  await Promise.all(promises);
+  return htmlBody;
+}
+
+async function genBase64FromImgTagSrc(src, relativeUri, i) {
+  let fileName = '';
+  let base64src = null;
+  if (src.match(/.*data\:image.*/)) {
+    base64src = await Promise.resolve(src.replace(/^[^,]+,{1}/, ''));
+    fileName =
+      sanitizeUri(getFileNameFromPath(relativeUri)).slice(0, 10) +
+      '-inline-image-' +
+      i.toString();
+  } else if (src.match(/^public\:\/\/.*/)) {
+    const { fullUri, fileNameExisting } = parseDrupalPublicImageUri(src);
+    const buffer = await downloadImageFromDrupal(fullUri);
+    base64src = Buffer.from(buffer).toString('base64');
+    fileName = fileNameExisting;
+  }
+  return { fileName: fileName, base64src: base64src };
+}
+
+async function processTagImages(htmlBody, relativeUri) {
+  const $ = cheerio.load(htmlBody);
+  const promises = $('img')
+    .toArray()
+    .map(async (el, i) => {
+      // get rid of everything up to the comma
+      const src = $(el).attr('src');
+      const { base64src, fileName } = await genBase64FromImgTagSrc(
+        src,
+        relativeUri,
+        i
+      );
+      if (base64src == null || fileName == '') {
+        return await Promise.resolve(null);
+      }
+      const { fullUri, _ } = await uploadImageToDirectus(base64src, fileName);
+      $(el).attr('src', fullUri);
+    });
+  await Promise.all(promises);
+  return $.html();
+}
+
+async function processAllInlineFiles(postData) {
+  postData.body = await convertManagedToPublicFiles(postData.body);
+  postData.body = await processTagImages(postData.body, postData.relative_uri);
+  console.log(postData.body);
+  return postData;
+}
+
+async function main() {
+  const testArticles = await fetchDrupalDatabase();
+  await processAllInlineFiles(testArticles[0]);
+}
+
+main();

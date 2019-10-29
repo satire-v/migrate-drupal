@@ -9,6 +9,9 @@
     "axois": "0.0.1-security"
   },
   "devDependencies": {
+    "@babel/cli": "^7.6.4",
+    "@babel/core": "^7.6.4",
+    "@babel/preset-flow": "^7.0.0",
     "cheerio": "^1.0.0-rc.3",
     "cjs-module": "^1.5.0",
     "form-data": "^2.5.1",
@@ -16,6 +19,7 @@
     "mysql2": "^2.0.0",
     "react": "^16.11.0",
     "request": "^2.88.0",
+    "request-promise-native": "^1.0.7",
     "s3": "^4.4.0",
     "yargs": "^14.2.0"
   },
