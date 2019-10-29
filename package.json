@@ -2,9 +2,13 @@
   "name": "websites-dev",
   "version": "1.0.0",
   "description": "",
-  "main": "",
+  "main": "migrate.js",
+  "scripts": {
+    "build": "babel migrate.js -o migrate-compiled.js",
+    "flow": "flow"
+  },
   "dependencies": {
-    "@directus/sdk-js": "^6.0.0-alpha.11",
+    "@directus/sdk-js": "^6.0.0-alpha.12",
     "axios": "^0.19.0",
     "axois": "0.0.1-security"
   },
@@ -13,9 +17,9 @@
     "@babel/core": "^7.6.4",
     "@babel/preset-flow": "^7.0.0",
     "cheerio": "^1.0.0-rc.3",
-    "cjs-module": "^1.5.0",
-    "form-data": "^2.5.1",
-    "gatsby-cli": "^2.8.5",
+    "flow": "^0.2.3",
+    "flow-bin": "^0.110.1",
+    "gatsby-cli": "^2.8.7",
     "mysql2": "^2.0.0",
     "react": "^16.11.0",
     "request": "^2.88.0",
@@ -23,14 +27,11 @@
     "s3": "^4.4.0",
     "yargs": "^14.2.0"
   },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jacobrienstra/websites-dev.git"
   },
-  "author": "",
+  "author": "Jacob Rienstra",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/jacobrienstra/websites-dev/issues"
