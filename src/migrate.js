@@ -5,7 +5,6 @@ const request = require('request-promise-native');
 const fs = require('fs');
 const yargs = require('yargs');
 const cheerio = require('cheerio');
-const mysql2 = require('mysql2/promise');
 
 const argv = yargs
   .option('db', {
@@ -24,13 +23,6 @@ const argv = yargs
     ['db', 'password'],
     'Please provide database name and password. Assumed to be running on localhost, user root, port 3306 (MySQL)'
   ).argv;
-
-const dbOptions = {
-  host: 'localhost',
-  user: 'root',
-  database: argv.db,
-  password: argv.password,
-};
 
 // function getAWSClient() {
 //   return s3.createClient({
@@ -88,7 +80,7 @@ async function fetchDrupalDatabase() {
       LEFT JOIN field_data_field_year y ON y.entity_id = n.nid
       LEFT JOIN field_data_field_tags tags ON tags.entity_id = n.nid
       LEFT JOIN taxonomy_term_data tags_tax ON tags_tax.tid = tags.field_tags_tid
-      LEFT JOIN field_revision_field_image image ON image.entity_id = n.nid
+      LEFT JOIN field_data_field_image image ON image.entity_id = n.nid
       LEFT JOIN file_managed files ON files.fid = image.field_image_fid
       LEFT JOIN url_alias urls ON CAST(REGEXP_REPLACE(urls.source, '[^0-9]', '') AS UNSIGNED) = n.nid
     WHERE n.type = ? AND urls.source LIKE 'node%' AND n.title LIKE '%malan%'
@@ -161,7 +153,7 @@ async function uploadImageToDirectus(imageBase64, fileName) {
 function findFID(obj) {
   if (obj === null || typeof obj != 'object') return null;
   var res = null;
-  for (key of Object.keys(obj)) {
+  for (let key of Object.keys(obj)) {
     if (key === 'fid') res = obj[key];
     else res = res || findFID(obj[key]);
   }
@@ -223,7 +215,10 @@ async function processTagImages(htmlBody, relativeUri) {
       if (base64src == null || fileName == '') {
         return await Promise.resolve(null);
       }
-      const { fullUri, _ } = await uploadImageToDirectus(base64src, fileName);
+      const { fullUri, imageID } = await uploadImageToDirectus(
+        base64src,
+        fileName
+      );
       $(el).attr('src', fullUri);
     });
   await Promise.all(promises);
