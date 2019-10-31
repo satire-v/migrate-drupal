@@ -13,7 +13,6 @@
   "dependencies": {
     "axios": "^0.19.0",
     "axois": "0.0.1-security",
-    "babel-eslint": "^10.0.3",
     "eslint-plugin-flowtype": "^4.3.0",
     "eslint-plugin-prettier": "^3.1.1",
     "flow-types": "^1.0.0",
@@ -27,7 +26,10 @@
     "@babel/cli": "^7.6.4",
     "@babel/core": "^7.6.4",
     "@babel/preset-flow": "^7.0.0",
+    "babel-core": "^6.26.3",
+    "babel-eslint": "^10.0.3",
     "babel-loader": "^8.0.6",
+    "babel-plugin-import": "^1.12.2",
     "cheerio": "^1.0.0-rc.3",
     "eslint": "^6.6.0",
     "eslint-config-prettier": "^6.5.0",
