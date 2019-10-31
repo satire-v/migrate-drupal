@@ -5,7 +5,8 @@ const request = require("request-promise-native");
 
 async function uploadImage(
   imageBase64: string,
-  fileName: string
+  fileName: string,
+  type?: ?string
 ): Promise<{ fullUri: string, imageID: number }> {
   const options: Obj = {
     method: "POST",
@@ -13,11 +14,12 @@ async function uploadImage(
     project: "_", // default
     auth: {
       // static auth token
-      bearer: "idrdhjfrhcvdbedekjhfvjdbuuelhece"
+      bearer: "letmeinyoubitch"
     },
     formData: {
       filename: fileName,
-      data: imageBase64
+      data: imageBase64,
+      contentType: type || ""
     },
     json: true
   };

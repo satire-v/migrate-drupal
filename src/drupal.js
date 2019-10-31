@@ -75,21 +75,26 @@ async function genBase64FromSrc(
   src: string,
   relativeUri: string,
   i: number
-): Promise<{ fileName: string, base64src: string }> {
-  let fileName = "";
-  let base64src = null;
+): Promise<{ fileName: string, base64src: string, imgType: ?string }> {
+  var fileName = "";
+  var base64src = null;
+  var imgType = null;
   if (src.match(/.*data:image.*/)) {
-    base64src = await Promise.resolve(src.replace(/^[^,]+,{1}/, ""));
+    const block = src.split(";");
+    base64src = block[1].split(",")[1];
+    imgType = block[0].split(":")[1];
     fileName =
       utils.sanitizeUri(utils.getFileNameFromUri(relativeUri)).slice(0, 10) +
       "-inline-image-" +
-      i.toString();
+      i.toString() +
+      "." +
+      imgType.split("/")[1];
   } else {
     var fullUri = null;
     if (src.match(/^public:\/\/.*/)) {
       var res = getExternalImagePaths(src);
       fullUri = res.fullUri;
-      fileName = res.fileNameExisting;
+      fileName = decodeURI(res.fileNameExisting);
     } else {
       fullUri = src;
       fileName = utils.getFileNameFromUri(src);
@@ -100,7 +105,7 @@ async function genBase64FromSrc(
       throw "Something went wrong downloading the image from drupal";
     }
   }
-  return { fileName: fileName, base64src: base64src };
+  return { fileName: fileName, base64src: base64src, imgType: imgType };
 }
 
 async function genProcessHTMLImageTags(
@@ -113,7 +118,7 @@ async function genProcessHTMLImageTags(
     .map(async (el, i) => {
       // get rid of everything up to the comma
       const src = $(el).attr("src");
-      const { base64src, fileName } = await genBase64FromSrc(
+      const { base64src, fileName, imgType } = await genBase64FromSrc(
         src,
         relativeUri,
         i
@@ -123,7 +128,8 @@ async function genProcessHTMLImageTags(
       }
       const { fullUri, imageID } = await directus.uploadImage(
         base64src,
-        fileName
+        fileName,
+        imgType
       );
       $(el).attr("src", fullUri);
     });

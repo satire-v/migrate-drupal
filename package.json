@@ -4,9 +4,10 @@
   "description": "",
   "main": "src/parse.js",
   "scripts": {
-    "build": "babel src -d lib",
+    "build": "babel src -d lib --source-maps",
     "flow": "flow",
-    "test": "babel src -d lib && node ./lib/parse.js",
+    "test": "npm run build && node ./lib/parse.js",
+    "debug": "npm run build && node --inspect-brk ./lib/parse.js",
     "go": "node ./lib/parse.js"
   },
   "dependencies": {
