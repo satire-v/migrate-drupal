@@ -1,11 +1,13 @@
 // @flow
+import type { Obj } from "./utils.js";
+
 const cheerio = require("cheerio");
 const queries = require("./queries.js");
 const utils = require("./utils.js");
 const request = require("request-promise-native");
 const directus = require("./directus.js");
 
-async function fetchFullDatabase(db: Object): Object {
+async function fetchFullDatabase(db: Obj): Obj {
   var [nodes, _] = await db.query(queries.dumpFullDrupal, ["article", "node"]);
   nodes = JSON.parse(JSON.stringify(nodes));
   return nodes;
@@ -34,7 +36,7 @@ async function downloadImage(fullUri: string): Promise<string> {
   return await request(options);
 }
 
-function findFID(obj: Object): ?number {
+function findFID(obj: Obj): ?number {
   if (obj === null || typeof obj != "object") return null;
   var res = null;
   for (let key of Object.keys(obj)) {
@@ -44,10 +46,7 @@ function findFID(obj: Object): ?number {
   return res;
 }
 
-async function genManagedFileHTMLTag(
-  fileObj: Object,
-  db: any
-): Promise<string> {
+async function genManagedFileHTMLTag(fileObj: Obj, db: Obj): Promise<string> {
   const fid = findFID(fileObj);
   const [nodes, _] = await db.query(
     `SELECT uri FROM file_managed WHERE fid = ?`,
@@ -57,13 +56,14 @@ async function genManagedFileHTMLTag(
 }
 
 async function genProcessManagedToPublicFiles(
-  htmlBody: string
+  htmlBody: string,
+  db: Obj
 ): Promise<string> {
   const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
   if (managedFiles != null) {
     const promises = managedFiles.map(async fileObjStr => {
       let fileObj = JSON.parse(fileObjStr);
-      let repl = await genManagedFileHTMLTag(fileObj);
+      let repl = await genManagedFileHTMLTag(fileObj, db);
       htmlBody = htmlBody.replace(fileObjStr, repl);
     });
     await Promise.all(promises);

@@ -1,6 +1,7 @@
 // @flow
 // const s3 = require('s3');
-import type { PromiseConnection } from "mysql2/promise";
+import type { Obj } from "./utils.js";
+
 const mysql2 = require("mysql2/promise");
 
 // function getAWSClient() {
@@ -12,10 +13,7 @@ const mysql2 = require("mysql2/promise");
 //   });
 // }
 
-async function newDB(
-  dbName: String,
-  password: String
-): Promise<mysql2.PromiseConnection> {
+async function newDB(dbName: String, password: String): Promise<Obj> {
   return await mysql2.createConnection({
     host: "localhost",
     user: "root",

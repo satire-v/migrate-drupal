@@ -2,10 +2,12 @@
   "name": "miragtion-satirev",
   "version": "1.0.0",
   "description": "",
-  "main": "migrate.js",
+  "main": "src/parse.js",
   "scripts": {
-    "build": "babel src/ -o migrate.js",
-    "flow": "flow"
+    "build": "babel src -d lib",
+    "flow": "flow",
+    "test": "babel src -d lib && node ./lib/parse.js",
+    "go": "node ./lib/parse.js"
   },
   "dependencies": {
     "@directus/sdk-js": "^6.0.0-alpha.12",
@@ -18,20 +20,24 @@
     "mysql2": "^2.0.0",
     "react": "^16.11.0",
     "request": "^2.88.0",
-    "s3": "^4.4.0",
-    "yargs": "^14.2.0"
+    "s3": "^4.4.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.6.4",
     "@babel/core": "^7.6.4",
     "@babel/preset-flow": "^7.0.0",
+    "babel-core": "^6.26.3",
+    "babel-loader": "^8.0.6",
     "cheerio": "^1.0.0-rc.3",
     "eslint": "^6.6.0",
     "eslint-config-prettier": "^6.5.0",
     "eslint-plugin-babel": "^5.3.0",
     "flow-bin": "^0.111.0",
     "prettier-eslint": "^9.0.0",
-    "request-promise-native": "^1.0.7"
+    "request-promise-native": "^1.0.7",
+    "webpack": "^4.41.2",
+    "webpack-cli": "^3.3.10",
+    "yargs": "^14.2.0"
   },
   "repository": {
     "type": "git",

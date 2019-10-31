@@ -5,18 +5,18 @@ read -s drupal_password
 echo
 echo 'Attempting to fetch SQL dump'
 echo
-ssh -oHostKeyAlgorithms=+ssh-dss satirev@50.63.72.1 "mysqldump -p$drupal_password -h satirevdrupal.db.9044516.hostedresource.com -u satirevdrupal $DATABASE_NAME node field_data_body field_data_field_caption field_data_field_category taxonomy_term_data field_data_field_teaser field_data_field_year field_data_field_tags field_data_field_image file_managed url_alias > $DATABASE_NAME.sql && if ! [[ -s $DATABASE_NAME.sql ]]; then echo 'Database dump is empty' > stderr exit 1; fi"
+ssh -oHostKeyAlgorithms=+ssh-dss satirev@50.63.72.1 "mysqldump -p$drupal_password -h satirevdrupal.db.9044516.hostedresource.com -u satirevdrupal $DATABASE_NAME node field_data_body field_data_field_caption field_data_field_category taxonomy_term_data field_data_field_teaser field_data_field_year field_data_field_tags field_data_field_image file_managed url_alias > $DATABASE_NAME.sql && if ! [[ -s $DATABASE_NAME.sql ]]; then echo 'Database dump is empty' > stderr exit 1; fi; exit;"
 if [[ "$?" -ne "0" ]]; then
     exit 1
 fi
 echo 'Database dumped. Copying from server.'
 echo
-sleep 1
+sleep 2
 scp -oHostKeyAlgorithms=+ssh-dss satirev@50.63.72.1:./$DATABASE_NAME.sql ./
-echo
 if [[ "$?" -ne "0" ]]; then
     exit 1
 fi
+echo
 echo 'Attempting to connect to locally running MySQL server as root'
 echo 'on localhost:3306'
 echo

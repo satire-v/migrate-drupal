@@ -1,11 +1,13 @@
 // @flow
+import type { Obj } from "./utils.js";
+
 const request = require("request-promise-native");
 
 async function uploadImage(
   imageBase64: string,
   fileName: string
 ): Promise<{ fullUri: string, imageID: number }> {
-  const options: Object = {
+  const options: Obj = {
     method: "POST",
     url: "http://admin.satirev.org/_/files",
     project: "_", // default
