@@ -1,7 +1,7 @@
 {
   "name": "miragtion-satirev",
   "version": "1.0.0",
-  "description": "",
+  "description": "Migrate Satire V Site to Directus",
   "main": "src/parse.js",
   "scripts": {
     "build": "babel src -d lib --source-maps",
@@ -11,11 +11,11 @@
     "go": "node ./lib/parse.js"
   },
   "dependencies": {
-    "@directus/sdk-js": "^6.0.0-alpha.12",
     "axios": "^0.19.0",
     "axois": "0.0.1-security",
     "babel-eslint": "^10.0.3",
     "eslint-plugin-flowtype": "^4.3.0",
+    "eslint-plugin-prettier": "^3.1.1",
     "flow-types": "^1.0.0",
     "gatsby-cli": "^2.8.7",
     "mysql2": "^2.0.0",
@@ -27,7 +27,6 @@
     "@babel/cli": "^7.6.4",
     "@babel/core": "^7.6.4",
     "@babel/preset-flow": "^7.0.0",
-    "babel-core": "^6.26.3",
     "babel-loader": "^8.0.6",
     "cheerio": "^1.0.0-rc.3",
     "eslint": "^6.6.0",
