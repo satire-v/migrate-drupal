@@ -1,31 +1,37 @@
 {
-  "name": "websites-dev",
+  "name": "miragtion-satirev",
   "version": "1.0.0",
   "description": "",
   "main": "migrate.js",
   "scripts": {
-    "build": "babel migrate.js -o migrate-compiled.js",
+    "build": "babel src/ -o migrate.js",
     "flow": "flow"
   },
   "dependencies": {
     "@directus/sdk-js": "^6.0.0-alpha.12",
     "axios": "^0.19.0",
-    "axois": "0.0.1-security"
+    "axois": "0.0.1-security",
+    "babel-eslint": "^10.0.3",
+    "eslint-plugin-flowtype": "^4.3.0",
+    "flow-types": "^1.0.0",
+    "gatsby-cli": "^2.8.7",
+    "mysql2": "^2.0.0",
+    "react": "^16.11.0",
+    "request": "^2.88.0",
+    "s3": "^4.4.0",
+    "yargs": "^14.2.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.6.4",
     "@babel/core": "^7.6.4",
     "@babel/preset-flow": "^7.0.0",
     "cheerio": "^1.0.0-rc.3",
-    "flow": "^0.2.3",
-    "flow-bin": "^0.110.1",
-    "gatsby-cli": "^2.8.7",
-    "mysql2": "^2.0.0",
-    "react": "^16.11.0",
-    "request": "^2.88.0",
-    "request-promise-native": "^1.0.7",
-    "s3": "^4.4.0",
-    "yargs": "^14.2.0"
+    "eslint": "^6.6.0",
+    "eslint-config-prettier": "^6.5.0",
+    "eslint-plugin-babel": "^5.3.0",
+    "flow-bin": "^0.111.0",
+    "prettier-eslint": "^9.0.0",
+    "request-promise-native": "^1.0.7"
   },
   "repository": {
     "type": "git",
