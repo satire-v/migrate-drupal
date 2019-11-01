@@ -10,7 +10,7 @@ async function uploadImage(
 ): Promise<{ fullUri: string, imageID: number }> {
   const options: Obj = {
     method: "POST",
-    url: "http://admin.satirev.org/_/files",
+    url: "http://admin.satirev.org/satirev/files",
     project: "_", // default
     auth: {
       // static auth token
