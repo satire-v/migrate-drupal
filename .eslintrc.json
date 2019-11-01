@@ -1,0 +1,25 @@
+{
+  "env": {
+    "commonjs": true,
+    "es6": true,
+    "node": true
+  },
+  "extends": ["eslint:recommended"],
+  "globals": {
+    "Atomics": "readonly",
+    "SharedArrayBuffer": "readonly",
+    "module": true,
+    "global": true,
+    "require": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2018,
+    "sourceType": "module"
+  },
+  "plugins": ["babel", "flowtype"],
+  "parser": "babel-eslint",
+  "rules": {
+    "no-unused-vars": 1,
+    "no-console": 1
+  }
+}
