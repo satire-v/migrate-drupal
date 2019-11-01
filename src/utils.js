@@ -5,7 +5,8 @@ function sanitizeUri(uri: string): string {
 }
 
 function getFileNameFromUri(uri: string): string {
-  return uri.replace(/^.*(\\|\/|:)/, "");
+  const s = uri.split("/");
+  return s[s.length - 1];
 }
 export type Obj = { [key: string | number]: any };
 module.exports = { getFileNameFromUri, sanitizeUri };

@@ -80,6 +80,7 @@ async function genBase64FromSrc(
   var base64src = null;
   var imgType = null;
   if (src.match(/.*data:image.*/)) {
+    // base 64 image
     const block = src.split(";");
     base64src = block[1].split(",")[1];
     imgType = block[0].split(":")[1];
@@ -90,6 +91,7 @@ async function genBase64FromSrc(
       "." +
       imgType.split("/")[1];
   } else {
+    // public image on server
     var fullUri = null;
     if (src.match(/^public:\/\/.*/)) {
       var res = getExternalImagePaths(src);
