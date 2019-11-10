@@ -1,6 +1,6 @@
 #!/bin/bash
 DATABASE_NAME="satirevdrupal"
-echo -n 'Drupal database password (user satirev): '
+echo -n 'Drupal database password (user satirevdrupal): '
 read -s drupal_password
 echo
 echo 'Attempting to fetch SQL dump'
