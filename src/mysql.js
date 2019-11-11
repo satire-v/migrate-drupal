@@ -13,7 +13,7 @@ const mysql2 = require("mysql2/promise");
 //   });
 // }
 
-async function newDB(dbName: String, password: String): Promise<Obj> {
+async function newDB(dbName: string, password: string): Promise<Obj> {
   return await mysql2.createConnection({
     host: "localhost",
     user: "root",

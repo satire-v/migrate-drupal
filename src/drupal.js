@@ -1,5 +1,5 @@
 // @flow
-import type { Obj } from "./utils.js";
+import type { Obj, Article } from "./utils.js";
 
 const cheerio = require("cheerio");
 const queries = require("./queries.js");
@@ -7,7 +7,7 @@ const utils = require("./utils.js");
 const request = require("request-promise-native");
 const directus = require("./directus.js");
 
-async function fetchFullDatabase(db: Obj): Obj {
+async function fetchFullDatabase(db: Obj): Promise<Array<Article>> {
   var [nodes, _] = await db.query(queries.dumpFullDrupal, ["article", "node"]);
   nodes = JSON.parse(JSON.stringify(nodes));
   return nodes;
@@ -120,28 +120,45 @@ async function genProcessHTMLImageTags(
     .map(async (el, i) => {
       // get rid of everything up to the comma
       const src = $(el).attr("src");
-      const { base64src, fileName, imgType } = await genBase64FromSrc(
+      const { fullUri, imageID } = await drupalToDirectusImage(
         src,
         relativeUri,
         i
       );
-      if (base64src == null || fileName == "") {
-        return await Promise.resolve(null);
+      if (fullUri == null) {
+        return;
       }
-      const { fullUri, imageID } = await directus.uploadImage(
-        base64src,
-        fileName,
-        imgType
-      );
       $(el).attr("src", fullUri);
     });
   await Promise.all(promises);
   return $.html();
 }
 
+async function drupalToDirectusImage(
+  src: string,
+  relativeUri: string,
+  i?: number
+): Promise<{ fullUri: string, imageID: number }> {
+  const { base64src, fileName, imgType } = await genBase64FromSrc(
+    src,
+    relativeUri,
+    i || 0
+  );
+  if (base64src == null || fileName == "") {
+    return await Promise.resolve({});
+  }
+  const { fullUri, imageID } = await directus.uploadImage(
+    base64src,
+    fileName,
+    imgType
+  );
+  return { fullUri: fullUri, imageID: imageID };
+}
+
 module.exports = {
   fetchFullDatabase,
   genProcessHTMLImageTags,
   genProcessManagedToPublicFiles,
-  downloadImage
+  downloadImage,
+  drupalToDirectusImage
 };
