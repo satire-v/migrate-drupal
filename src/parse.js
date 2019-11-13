@@ -1,5 +1,6 @@
 // @flow
-import type { DrupalArticle, Obj } from './utils';
+import type { DrupalArticle } from './drupal';
+import type { Obj } from './utils';
 
 const fs = require('fs');
 

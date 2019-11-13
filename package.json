@@ -19,7 +19,9 @@
     "request": "^2.88.0",
     "s3": "^4.4.0",
     "yargs": "^14.2.0",
-    "slug": "^1.1.0"
+    "slug": "^1.1.0",
+    "cheerio": "^1.0.0-rc.3",
+    "request-promise-native": "^1.0.8"
   },
   "devDependencies": {
     "@babel/cli": "^7.7.0",
@@ -29,7 +31,6 @@
     "babel-eslint": "^10.0.3",
     "babel-loader": "^8.0.6",
     "babel-plugin-import": "^1.12.2",
-    "cheerio": "^1.0.0-rc.3",
     "eslint": "^6.5.0",
     "eslint-config-airbnb": "^18.0.1",
     "eslint-config-prettier": "^6.5.0",
@@ -44,7 +45,6 @@
     "flow-bin": "^0.112.0",
     "flow-types": "^1.0.0",
     "prettier-eslint": "^9.0.0",
-    "request-promise-native": "^1.0.8",
     "webpack": "^4.41.2",
     "webpack-cli": "^3.3.10"
   },
