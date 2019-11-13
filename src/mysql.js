@@ -1,8 +1,8 @@
 // @flow
 // const s3 = require('s3');
-import type { Obj } from "./utils.js";
+import type { Obj } from './utils';
 
-const mysql2 = require("mysql2/promise");
+const mysql2 = require('mysql2/promise');
 
 // function getAWSClient() {
 //   return s3.createClient({
@@ -15,10 +15,10 @@ const mysql2 = require("mysql2/promise");
 
 function newLocalDB(dbName: string, password: string): Promise<Obj> {
   return mysql2.createConnection({
-    host: "localhost",
-    user: "root",
+    host: 'localhost',
+    user: 'root',
     database: dbName,
-    password: password
+    password,
   });
 }
 

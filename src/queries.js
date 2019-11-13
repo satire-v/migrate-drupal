@@ -1,5 +1,5 @@
 // @flow
-import type { Obj } from "./utils.js";
+import type { Obj } from './utils';
 
 const dumpFullDrupal: string = `SELECT
         n.nid,
@@ -50,12 +50,12 @@ const dumpFullDrupal: string = `SELECT
       ORDER BY n.created DESC
       LIMIT 10`;
 
-//TODO programmatic
+// TODO programmatic
 const createCategories = (categories: Obj): string => {
-  let query = `DELETE FROM categories;\n`;
-  for (let key of Object.keys(categories)) {
+  let query = 'DELETE FROM categories;\n';
+  Object.keys(categories).forEach((key) => {
     query += `INSERT INTO categories (\`name\`, id) VALUES ('${key}', ${categories[key]});\n`;
-  }
+  });
   return query;
 };
 module.exports = { dumpFullDrupal, createCategories };

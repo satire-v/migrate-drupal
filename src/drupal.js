@@ -52,16 +52,16 @@ async function downloadImage(fullUri: string): Promise<string> {
       'user-agent': 'node.js',
     },
   };
-  return await request(options);
+  return request(options);
 }
 
 function findFID(obj: Obj): ?number {
   if (obj === null || typeof obj !== 'object') return null;
   let res = null;
-  for (const key of Object.keys(obj)) {
+  Object.keys(obj).forEach((key) => {
     if (key === 'fid') res = obj[key];
     else res = res || findFID(obj[key]);
-  }
+  });
   return res;
 }
 
@@ -83,7 +83,7 @@ async function genProcessManagedToPublicFiles(
     const promises = managedFiles.map(async (fileObjStr) => {
       const fileObj = JSON.parse(fileObjStr);
       const repl = await genManagedFileHTMLTag(fileObj, db);
-      htmlBody = htmlBody.replace(fileObjStr, repl);
+      htmlBody.replace(fileObjStr, repl);
     });
     await Promise.all(promises);
   }
@@ -101,8 +101,9 @@ async function genBase64FromSrc(
   if (src.match(/.*data:image.*/)) {
     // base 64 image
     const block = src.split(';');
-    base64src = block[1].split(',')[1];
-    imgType = block[0].split(':')[1];
+    [imgType, base64src] = block;
+    [, imgType] = imgType.split(':');
+    [, base64src] = base64src.split(',');
     fileName = `${utils.sanitizeUri(utils.getFileNameFromUri(relativeUri)).slice(0, 10)
     }-inline-image-${
       i.toString()
@@ -122,10 +123,32 @@ async function genBase64FromSrc(
     const buffer = await downloadImage(fullUri);
     base64src = Buffer.from(buffer).toString('base64');
     if (base64src == null) {
-      throw 'Something went wrong downloading the image from drupal';
+      throw new Error('Something went wrong downloading the image from drupal');
     }
   }
   return { fileName, base64src, imgType };
+}
+
+
+async function drupalToDirectusImage(
+  src: string,
+  relativeUri: string,
+  i?: number,
+): Promise<{ fullUri: string, imageID: number }> {
+  const { base64src, fileName, imgType } = await genBase64FromSrc(
+    src,
+    relativeUri,
+    i || 0,
+  );
+  if (base64src == null || fileName === '') {
+    return Promise.resolve({});
+  }
+  const { fullUri, imageID } = await directus.uploadImage(
+    base64src,
+    fileName,
+    imgType,
+  );
+  return { fullUri, imageID };
 }
 
 async function genProcessHTMLImageTags(
@@ -152,25 +175,17 @@ async function genProcessHTMLImageTags(
   return $.html();
 }
 
-async function drupalToDirectusImage(
-  src: string,
-  relativeUri: string,
-  i?: number,
-): Promise<{ fullUri: string, imageID: number }> {
-  const { base64src, fileName, imgType } = await genBase64FromSrc(
-    src,
-    relativeUri,
-    i || 0,
+async function processHTMLInlineFileTags(
+  postData: DrupalArticle,
+  db: Obj,
+): Promise<string> {
+  const init = postData.body;
+  const res1 = await genProcessManagedToPublicFiles(init, db);
+  const res2 = await genProcessHTMLImageTags(
+    res1,
+    postData.relative_uri,
   );
-  if (base64src == null || fileName == '') {
-    return await Promise.resolve({});
-  }
-  const { fullUri, imageID } = await directus.uploadImage(
-    base64src,
-    fileName,
-    imgType,
-  );
-  return { fullUri, imageID };
+  return res2;
 }
 
 module.exports = {
@@ -178,5 +193,6 @@ module.exports = {
   genProcessHTMLImageTags,
   genProcessManagedToPublicFiles,
   downloadImage,
+  processHTMLInlineFileTags,
   drupalToDirectusImage,
 };

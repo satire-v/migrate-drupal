@@ -31,19 +31,6 @@ const { argv } = yargs
     'Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)',
   );
 
-async function processAllHTMLInlineFiles(
-  postData: DrupalArticle,
-  db: Obj,
-): Promise<string> {
-  const init = postData.body;
-  const res1 = await drupal.genProcessManagedToPublicFiles(init, db);
-  const res2 = await drupal.genProcessHTMLImageTags(
-    res1,
-    postData.relative_uri,
-  );
-  return res2;
-}
-
 function fetchDrupal(db: Obj): Promise<Array<DrupalArticle>> {
   return drupal.fetchFullDatabase(db);
 }
@@ -53,7 +40,7 @@ async function createArticleQuery(
   categoryMap: Obj,
   db: Obj,
 ): Promise<string> {
-  const body = await processAllHTMLInlineFiles(article, db);
+  const body = await drupal.processHTMLInlineFileTags(article, db);
   const pub = article.status ? 'published' : 'draft';
   const { imageID } = await drupal.drupalToDirectusImage(
     article.image_uri,

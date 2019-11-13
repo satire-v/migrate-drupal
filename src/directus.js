@@ -1,27 +1,27 @@
 // @flow
-import type { Obj } from "./utils.js";
+import type { Obj } from './utils';
 
-const request = require("request-promise-native");
+const request = require('request-promise-native');
 
 async function uploadImage(
   imageBase64: string,
   fileName: string,
-  type?: ?string
+  type?: ?string,
 ): Promise<{ fullUri: string, imageID: number }> {
   const options: Obj = {
-    method: "POST",
-    url: "http://admin.satirev.org/_/files",
-    project: "_", // default
+    method: 'POST',
+    url: 'http://admin.satirev.org/_/files',
+    project: '_', // default
     auth: {
       // static auth token
-      bearer: "letmeinyoubitch"
+      bearer: 'letmeinyoubitch',
     },
     formData: {
       filename: fileName,
       data: imageBase64,
-      contentType: type || ""
+      contentType: type || '',
     },
-    json: true
+    json: true,
   };
   const content = await request(options);
   // return url for sourcing
