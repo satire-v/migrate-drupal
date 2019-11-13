@@ -17,7 +17,9 @@
     "mysql2": "^2.0.0",
     "react": "^16.11.0",
     "request": "^2.88.0",
-    "s3": "^4.4.0"
+    "s3": "^4.4.0",
+    "yargs": "^14.2.0",
+    "slug": "^1.1.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.7.0",
@@ -29,18 +31,22 @@
     "babel-plugin-import": "^1.12.2",
     "cheerio": "^1.0.0-rc.3",
     "eslint": "^6.5.0",
+    "eslint-config-airbnb": "^18.0.1",
     "eslint-config-prettier": "^6.5.0",
     "eslint-plugin-babel": "^5.3.0",
     "eslint-plugin-flowtype": "^4.4.1",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-jsx-a11y": "^6.2.3",
     "eslint-plugin-prettier": "^3.1.1",
+    "eslint-plugin-react": "^7.16.0",
+    "eslint-plugin-react-hooks": "^1.7.0",
+    "eslint-plugin-sort-requires": "^2.1.0",
     "flow-bin": "^0.112.0",
     "flow-types": "^1.0.0",
     "prettier-eslint": "^9.0.0",
     "request-promise-native": "^1.0.8",
-    "slug": "^1.1.0",
     "webpack": "^4.41.2",
-    "webpack-cli": "^3.3.10",
-    "yargs": "^14.2.0"
+    "webpack-cli": "^3.3.10"
   },
   "repository": {
     "type": "git",

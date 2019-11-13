@@ -2,7 +2,7 @@ env:
   commonjs: true
   es6: true
   node: true
-extends: eslint:recommended
+extends: airbnb
 globals:
   Atomics: readonly
   SharedArrayBuffer: readonly
@@ -12,8 +12,10 @@ globals:
 parserOptions:
   ecmaVersion: 2019
   sourceType: module
-plugins: [flowtype]
+plugins: [flowtype, babel, jsx-a11y]
 parser: babel-eslint
 rules:
   no-unused-vars: 1
   no-console: 1
+  import/order: ["warn", { "newlines-between": "always" }]
+  sort-imports: 1
