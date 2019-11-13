@@ -1,5 +1,5 @@
 // @flow
-import type { Obj, Article } from "./utils.js";
+import type { Obj, DrupalArticle } from "./utils.js";
 
 const cheerio = require("cheerio");
 const queries = require("./queries.js");
@@ -7,8 +7,8 @@ const utils = require("./utils.js");
 const request = require("request-promise-native");
 const directus = require("./directus.js");
 
-async function fetchFullDatabase(db: Obj): Promise<Array<Article>> {
-  var [nodes, _] = await db.query(queries.dumpFullDrupal, ["article", "node"]);
+async function fetchFullDatabase(db: Obj): Promise<Array<DrupalArticle>> {
+  var [nodes, ] = await db.query(queries.dumpFullDrupal, ["article", "node"]);
   nodes = JSON.parse(JSON.stringify(nodes));
   return nodes;
 }
@@ -48,7 +48,7 @@ function findFID(obj: Obj): ?number {
 
 async function genManagedFileHTMLTag(fileObj: Obj, db: Obj): Promise<string> {
   const fid = findFID(fileObj);
-  const [nodes, _] = await db.query(
+  const [nodes, ] = await db.query(
     `SELECT uri FROM file_managed WHERE fid = ?`,
     [fid]
   );
@@ -120,7 +120,7 @@ async function genProcessHTMLImageTags(
     .map(async (el, i) => {
       // get rid of everything up to the comma
       const src = $(el).attr("src");
-      const { fullUri, imageID } = await drupalToDirectusImage(
+      const { fullUri,  } = await drupalToDirectusImage(
         src,
         relativeUri,
         i

@@ -7,7 +7,7 @@ const fs = require("fs");
 const mysql2 = require("mysql2/promise");
 const slug = require("slug");
 
-import type { Obj, Article } from "./utils.js";
+import type { Obj, DrupalArticle } from "./utils.js";
 
 const argv = yargs
   .option("db", {
@@ -28,8 +28,8 @@ const argv = yargs
     "Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)"
   ).argv;
 
-async function processAllInlineFiles(
-  postData: Article,
+async function processAllHTMLInlineFiles(
+  postData: DrupalArticle,
   db: Obj
 ): Promise<string> {
   let init = postData.body;
@@ -38,18 +38,18 @@ async function processAllInlineFiles(
   return res2;
 }
 
-const fetchDrupal = (db: Obj): Promise<Array<Article>> => {
+function fetchDrupal(db: Obj): Promise<Array<DrupalArticle>> {
   return drupal.fetchFullDatabase(db);
-};
+}
 
 async function createArticleQuery(
-  article: Article,
+  article: DrupalArticle,
   category_map: Obj,
   db: Obj
 ): Promise<string> {
-  let body = await processAllInlineFiles(article, db);
+  let body = await processAllHTMLInlineFiles(article, db);
   let pub = article.status ? "published" : "draft";
-  const { fullUri, imageID } = await drupal.drupalToDirectusImage(
+  const { imageID } = await drupal.drupalToDirectusImage(
     article.image_uri,
     article.relative_uri
   );
@@ -70,14 +70,14 @@ async function createArticleQuery(
   }, '${slug(article.title, {
     lower: true
   })}', ${mysql2.escape(article.relative_uri)}
-  )`;
+)`;
   return values;
 }
 
 //TODO Fix names
 async function main() {
-  const db = await mysql.newDB(argv.db, argv.password);
-  const articles: Array<Article> = await fetchDrupal(db);
+  const db = await mysql.newLocalDB(argv.db, argv.password);
+  const articles: Array<DrupalArticle> = await fetchDrupal(db);
   const categories = Object({
     Harvard: 1,
     Region: 2,
@@ -89,21 +89,21 @@ async function main() {
   const catQuery = queries.createCategories(categories);
   const deleteArticles = `DELETE FROM articles;\n`;
   const insertStart = `INSERT INTO articles (
-    \`status\`, 
+    \`status\`,
     created_by,
     modified_by,
-    created_on, 
-    modified_on, 
-    title, 
-    body, 
-    tags, 
-    featured_image, 
-    featured_image_caption, 
-    excerpt, 
-    category, 
+    created_on,
+    modified_on,
+    title,
+    body,
+    tags,
+    featured_image,
+    featured_image_caption,
+    excerpt,
+    category,
     slug,
     legacy_slug
-  ) 
+  )
   VALUES `;
   let articleQueryArray = [];
   for (let article of articles) {

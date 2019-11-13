@@ -9,7 +9,7 @@ function getFileNameFromUri(uri: string): string {
   return s[s.length - 1];
 }
 export type Obj = { [key: string | number]: any };
-export type Article = {
+export type DrupalArticle = {
   nid: number,
   title: string,
   created: number,

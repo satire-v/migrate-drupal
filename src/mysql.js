@@ -13,8 +13,8 @@ const mysql2 = require("mysql2/promise");
 //   });
 // }
 
-async function newDB(dbName: string, password: string): Promise<Obj> {
-  return await mysql2.createConnection({
+function newLocalDB(dbName: string, password: string): Promise<Obj> {
+  return mysql2.createConnection({
     host: "localhost",
     user: "root",
     database: dbName,
@@ -22,4 +22,4 @@ async function newDB(dbName: string, password: string): Promise<Obj> {
   });
 }
 
-module.exports = { newDB };
+module.exports = { newLocalDB };
