@@ -4,7 +4,6 @@ import type { Obj } from './utils';
 const cheerio = require('cheerio');
 const request = require('request-promise-native');
 
-const queries = require('./queries.js');
 const utils = require('./utils.js');
 const directus = require('./directus.js');
 
@@ -26,13 +25,73 @@ export type DrupalArticle = {
   tags_info: string
 };
 
-async function fetchFullDatabase(db: Obj): Promise<Array<DrupalArticle>> {
-  let [nodes] = await db.query(queries.dumpFullDrupal, ['article', 'node']);
-  nodes = JSON.parse(JSON.stringify(nodes));
-  return nodes;
+const getDrupalArticlesQuery: string = `SELECT
+        n.nid,
+        n.title,
+        n.created,
+        n.changed,
+        n.status AS status,
+        b.body_value AS body,
+        c.field_caption_value AS caption,
+        cat.field_category_tid AS category_id,
+        tax.name AS category_name,
+        t.field_teaser_value AS teaser,
+        y.field_year_value AS year,
+        image.field_image_fid as image_id,
+        files.uri as image_uri,
+        urls.alias as relative_uri,
+        GROUP_CONCAT 
+        (DISTINCT CONCAT(tags_tax.name) SEPARATOR ',') 
+        AS tags_info
+      FROM
+        node n
+        LEFT JOIN field_data_body b ON b.entity_id = n.nid
+        LEFT JOIN field_data_field_caption c ON c.entity_id = n.nid
+        LEFT JOIN field_data_field_category cat ON cat.entity_id = n.nid
+        LEFT JOIN taxonomy_term_data tax ON tax.tid = cat.field_category_tid
+        LEFT JOIN field_data_field_teaser t ON t.entity_id = n.nid
+        LEFT JOIN field_data_field_year y ON y.entity_id = n.nid
+        LEFT JOIN field_data_field_tags tags ON tags.entity_id = n.nid
+        LEFT JOIN taxonomy_term_data tags_tax ON tags_tax.tid = tags.field_tags_tid
+        LEFT JOIN field_data_field_image image ON image.entity_id = n.nid
+        LEFT JOIN file_managed files ON files.fid = image.field_image_fid
+        LEFT JOIN url_alias urls ON CAST(REGEXP_REPLACE(urls.source, '[^0-9]', '') AS UNSIGNED) = n.nid
+      WHERE n.type = article AND urls.source LIKE 'node%'
+      GROUP BY n.nid,
+        n.title,
+        n.created,
+        n.changed,
+        status,
+        body,
+        caption,
+        category_id,
+        category_name,
+        teaser,
+        year,
+        image_id,
+        image_uri,
+        relative_uri
+      ORDER BY n.created DESC
+      LIMIT 10`;
+
+function getAllArticles(db: Obj): Promise<Array<DrupalArticle>> {
+  const [nodes] = db.query(getDrupalArticlesQuery);
+  const articles = JSON.parse(JSON.stringify(nodes));
+  return articles;
 }
 
-function getExternalImagePaths(
+const getDrupalCategoriesQuery: string = 'SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = \'categories\'';
+
+async function getDrupalCategoriesMap(db: Obj): Promise<{[string]: number}> {
+  const [entries] = await db.query(getDrupalCategoriesQuery);
+  const categories = {};
+  entries.forEach((entry) => {
+    categories[entry.name] = entry.tid; // eslint-disable-line no-param-reassign
+  });
+  return categories;
+}
+
+function parseExternalImageInfo(
   localUri: string,
 ): { fullUri: string, fileNameExisting: string } {
   return {
@@ -65,7 +124,7 @@ function findFID(obj: Obj): ?number {
   return res;
 }
 
-async function genManagedFileHTMLTag(fileObj: Obj, db: Obj): Promise<string> {
+async function genManagedFileHTMLTag(db: Obj, fileObj: Obj): Promise<string> {
   const fid = findFID(fileObj);
   const [nodes] = await db.query(
     'SELECT uri FROM file_managed WHERE fid = ?',
@@ -75,14 +134,14 @@ async function genManagedFileHTMLTag(fileObj: Obj, db: Obj): Promise<string> {
 }
 
 async function genProcessManagedToPublicFiles(
-  htmlBody: string,
   db: Obj,
+  htmlBody: string,
 ): Promise<string> {
   const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
   if (managedFiles != null) {
     const promises = managedFiles.map(async (fileObjStr) => {
       const fileObj = JSON.parse(fileObjStr);
-      const repl = await genManagedFileHTMLTag(fileObj, db);
+      const repl = await genManagedFileHTMLTag(db, fileObj);
       htmlBody.replace(fileObjStr, repl);
     });
     await Promise.all(promises);
@@ -93,7 +152,6 @@ async function genProcessManagedToPublicFiles(
 async function genBase64FromSrc(
   src: string,
   relativeUri: string,
-  i: number,
 ): Promise<{ fileName: string, base64src: string, imgType: ?string }> {
   let fileName = '';
   let base64src = null;
@@ -105,18 +163,18 @@ async function genBase64FromSrc(
     [, imgType] = imgType.split(':');
     [, base64src] = base64src.split(',');
     fileName = `${utils.sanitizeUri(utils.getFileNameFromUri(relativeUri)).slice(0, 10)
-    }-inline-image-${
-      i.toString()
-    }.${
+    }-inline-image-.${
       imgType.split('/')[1]}`;
   } else {
-    // public image on server
+    // public file somwhere
     let fullUri = null;
+    // on server
     if (src.match(/^public:\/\/.*/)) {
-      const res = getExternalImagePaths(src);
+      const res = parseExternalImageInfo(src);
       fullUri = res.fullUri;
       fileName = decodeURI(res.fileNameExisting);
     } else {
+      // somewhere else
       fullUri = src;
       fileName = utils.getFileNameFromUri(src);
     }
@@ -133,12 +191,10 @@ async function genBase64FromSrc(
 async function drupalToDirectusImage(
   src: string,
   relativeUri: string,
-  i?: number,
 ): Promise<{ fullUri: string, imageID: number }> {
   const { base64src, fileName, imgType } = await genBase64FromSrc(
     src,
     relativeUri,
-    i || 0,
   );
   if (base64src == null || fileName === '') {
     return Promise.resolve({});
@@ -158,13 +214,11 @@ async function genProcessHTMLImageTags(
   const $ = cheerio.load(htmlBody);
   const promises = $('img')
     .toArray()
-    .map(async (el, i) => {
-      // get rid of everything up to the comma
+    .map(async (el) => {
       const src = $(el).attr('src');
       const { fullUri } = await drupalToDirectusImage(
         src,
         relativeUri,
-        i,
       );
       if (fullUri == null) {
         return;
@@ -176,12 +230,11 @@ async function genProcessHTMLImageTags(
 }
 
 async function processHTMLInlineFileTags(
-  postData: DrupalArticle,
   db: Obj,
+  postData: DrupalArticle,
 ): Promise<string> {
-  const init = postData.body;
-  const res1 = await genProcessManagedToPublicFiles(init, db);
-  const res2 = await genProcessHTMLImageTags(
+  const res1 = await genProcessManagedToPublicFiles(db, postData.body);
+  const res2 = genProcessHTMLImageTags(
     res1,
     postData.relative_uri,
   );
@@ -189,10 +242,11 @@ async function processHTMLInlineFileTags(
 }
 
 module.exports = {
-  fetchFullDatabase,
+  getAllArticles,
   genProcessHTMLImageTags,
   genProcessManagedToPublicFiles,
   downloadImage,
   processHTMLInlineFileTags,
   drupalToDirectusImage,
+  getDrupalCategoriesMap,
 };

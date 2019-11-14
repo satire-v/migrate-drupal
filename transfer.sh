@@ -32,8 +32,8 @@ import_local() {
   echo
   echo "Dropping current database, creating new one"
   echo
-  mysql -h localhost -u root -p$local_password -e "DROP SCHEMA IF EXISTS $DRUPAL_DATABASE; CREATE DATABASE $1"
-  mysql -h localhost -u root -p$local_password $1 <$2
+  mysql -u root -p$local_password -e "DROP SCHEMA IF EXISTS $1; CREATE DATABASE $1"
+  mysql -u root -p$local_password $1<$2
   echo
 }
 
@@ -89,59 +89,55 @@ invalid() {
   echo "That combination is not valid
   "
 }
-
-main() {
-  while [ "$1" != "" ]; do
-    case $1 in
-      -s | --source ) shift
-        source=$1
-      ;;
-      -a | --action ) shift
-        action=$1
-      ;;
-      -h | --help ) usage
-        exit
-      ;;
-      * ) usage
-        exit 1
-    esac
-    shift
-  done
-  case $source in
-    "directus" )
-      if ["$action" = "import"]; then
-        echo "SQL file to import to directus:
-        "
-        read dir_database_sql
-        import_directus $dir_database_sql
-        elif ["$action" = "export"]; then
-        export_directus
-      else
-        usage
-      fi
+while [ "$1" != "" ]; do
+  case $1 in
+    -s | --source ) shift
+      source=$1
     ;;
-    "drupal")
-      if ["$action" = "export"]; then
-        export_drupal
-      else
-        usage invalid
-      fi
+    -a | --action ) shift
+      action=$1
     ;;
-    "local")
-      if ["$action" = "import"]; then
-        echo "SQL file to import to local:
-        "
-        read local_database_sql
-        import_local $local_database_sql
-      else
-        usage invalid
-      fi
+    -h | --help ) usage
+      exit
     ;;
-    *)
-      usage
-    ;;
+    * ) usage
+      exit 1
   esac
-  echo "Done!"
-}
-
-main
+  shift
+done
+case $source in
+  "directus" )
+    if [ "$action" == "import" ]; then
+      echo -n "SQL file to import to directus: "
+      read dir_database_sql
+      echo
+      import_directus $dir_database_sql
+      elif [ "$action" == "export" ]; then
+      export_directus
+    else
+      usage
+    fi
+  ;;
+  "drupal")
+    if [ "$action" == "export" ]; then
+      export_drupal
+    else
+      usage invalid
+    fi
+  ;;
+  "local")
+    if [ "$action" == "import" ]; then
+      echo -n "Database name: "
+      read local_database_name
+      echo -n "SQL file to import to local: "
+      read local_database_sql
+      import_local $local_database_name $local_database_sql
+    else
+      usage invalid
+    fi
+  ;;
+  *)
+    usage
+  ;;
+esac
+echo "Done"
