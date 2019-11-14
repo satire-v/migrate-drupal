@@ -10,7 +10,7 @@ const yargs = require('yargs');
 
 const queries = require('./queries');
 const drupal = require('./drupal');
-const mysql = require('./mysql');
+const database = require('./database');
 
 const { argv } = yargs
   .option('db', {
@@ -69,7 +69,7 @@ async function createArticleQuery(
 
 // TODO Fix names
 async function main() {
-  const db = await mysql.newLocalDB(argv.db, argv.password);
+  const db = await database.newLocalDB(argv.db, argv.password);
   const articles: Array<DrupalArticle> = await fetchDrupal(db);
   const categories = Object({
     Harvard: 1,
