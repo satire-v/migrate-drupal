@@ -4,8 +4,7 @@ import type { Obj } from './utils';
 const cheerio = require('cheerio');
 const request = require('request-promise-native');
 
-const utils = require('./utils.js');
-const directus = require('./directus.js');
+const utils = require('./utils');
 
 export type DrupalArticle = {
   nid: number,
@@ -56,7 +55,7 @@ const getDrupalArticlesQuery: string = `SELECT
         LEFT JOIN field_data_field_image image ON image.entity_id = n.nid
         LEFT JOIN file_managed files ON files.fid = image.field_image_fid
         LEFT JOIN url_alias urls ON CAST(REGEXP_REPLACE(urls.source, '[^0-9]', '') AS UNSIGNED) = n.nid
-      WHERE n.type = article AND urls.source LIKE 'node%'
+      WHERE n.type = 'article' AND urls.source LIKE 'node%'
       GROUP BY n.nid,
         n.title,
         n.created,
@@ -74,36 +73,34 @@ const getDrupalArticlesQuery: string = `SELECT
       ORDER BY n.created DESC
       LIMIT 10`;
 
-function getAllArticles(db: Obj): Promise<Array<DrupalArticle>> {
-  const [nodes] = db.query(getDrupalArticlesQuery);
+const getAllArticles = async (db: Obj): Promise<Array<DrupalArticle>> => {
+  const [nodes] = await db.query(getDrupalArticlesQuery);
   const articles = JSON.parse(JSON.stringify(nodes));
   return articles;
-}
+};
 
 const getDrupalCategoriesQuery: string = 'SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = \'categories\'';
 
-async function getDrupalCategoriesMap(db: Obj): Promise<{[string]: number}> {
+const getDrupalCategoriesMap = async (db: Obj): Promise<{[string]: number}> => {
   const [entries] = await db.query(getDrupalCategoriesQuery);
   const categories = {};
   entries.forEach((entry) => {
     categories[entry.name] = entry.tid; // eslint-disable-line no-param-reassign
   });
   return categories;
-}
+};
 
-function parseExternalImageInfo(
+const parseExternalImageInfo = (
   localUri: string,
-): { fullUri: string, fileNameExisting: string } {
-  return {
-    fullUri: localUri.replace(
-      'public://',
-      'http://satirev.org/sites/default/files/',
-    ),
-    fileNameExisting: utils.getFileNameFromUri(localUri),
-  };
-}
+): { fullUri: string, fileNameExisting: string } => ({
+  fullUri: localUri.replace(
+    'public://',
+    'http://satirev.org/sites/default/files/',
+  ),
+  fileNameExisting: utils.getFileNameFromUri(localUri),
+});
 
-async function downloadImage(fullUri: string): Promise<string> {
+const downloadImage = async (fullUri: string): Promise<string> => {
   const options = {
     uri: fullUri,
     encoding: null,
@@ -112,9 +109,9 @@ async function downloadImage(fullUri: string): Promise<string> {
     },
   };
   return request(options);
-}
+};
 
-function findFID(obj: Obj): ?number {
+const findFID = (obj: Obj): ?number => {
   if (obj === null || typeof obj !== 'object') return null;
   let res = null;
   Object.keys(obj).forEach((key) => {
@@ -122,21 +119,21 @@ function findFID(obj: Obj): ?number {
     else res = res || findFID(obj[key]);
   });
   return res;
-}
+};
 
-async function genManagedFileHTMLTag(db: Obj, fileObj: Obj): Promise<string> {
+const genManagedFileHTMLTag = async (db: Obj, fileObj: Obj): Promise<string> => {
   const fid = findFID(fileObj);
   const [nodes] = await db.query(
     'SELECT uri FROM file_managed WHERE fid = ?',
     [fid],
   );
   return `<img src="${encodeURI(nodes[0].uri)}" />`;
-}
+};
 
-async function genProcessManagedToPublicFiles(
+const genProcessManagedToPublicFiles = async (
   db: Obj,
   htmlBody: string,
-): Promise<string> {
+): Promise<string> => {
   const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
   if (managedFiles != null) {
     const promises = managedFiles.map(async (fileObjStr) => {
@@ -147,12 +144,12 @@ async function genProcessManagedToPublicFiles(
     await Promise.all(promises);
   }
   return htmlBody;
-}
+};
 
-async function genBase64FromSrc(
+const genBase64FromSrc = async (
   src: string,
   relativeUri: string,
-): Promise<{ fileName: string, base64src: string, imgType: ?string }> {
+): Promise<{ fileName: string, base64src: string, imgType: ?string }> => {
   let fileName = '';
   let base64src = null;
   let imgType = null;
@@ -185,13 +182,13 @@ async function genBase64FromSrc(
     }
   }
   return { fileName, base64src, imgType };
-}
+};
 
 
-async function drupalToDirectusImage(
+const drupalToDirectusImage = async (
   src: string,
   relativeUri: string,
-): Promise<{ fullUri: string, imageID: number }> {
+): Promise<{ fullUri: string, imageID: number }> => {
   const { base64src, fileName, imgType } = await genBase64FromSrc(
     src,
     relativeUri,
@@ -199,18 +196,18 @@ async function drupalToDirectusImage(
   if (base64src == null || fileName === '') {
     return Promise.resolve({});
   }
-  const { fullUri, imageID } = await directus.uploadImage(
+  const { fullUri, imageID } = await utils.uploadImageDirectus(
     base64src,
     fileName,
     imgType,
   );
   return { fullUri, imageID };
-}
+};
 
-async function genProcessHTMLImageTags(
+const genProcessHTMLImageTags = async (
   htmlBody: string,
   relativeUri: string,
-): Promise<string> {
+): Promise<string> => {
   const $ = cheerio.load(htmlBody);
   const promises = $('img')
     .toArray()
@@ -227,19 +224,19 @@ async function genProcessHTMLImageTags(
     });
   await Promise.all(promises);
   return $.html();
-}
+};
 
-async function processHTMLInlineFileTags(
+const processHTMLInlineFileTags = async (
   db: Obj,
   postData: DrupalArticle,
-): Promise<string> {
+): Promise<string> => {
   const res1 = await genProcessManagedToPublicFiles(db, postData.body);
   const res2 = genProcessHTMLImageTags(
     res1,
     postData.relative_uri,
   );
   return res2;
-}
+};
 
 module.exports = {
   getAllArticles,

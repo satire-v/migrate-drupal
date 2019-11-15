@@ -4,6 +4,7 @@ import type { Obj } from './utils';
 
 const mysql2 = require('mysql2/promise');
 
+
 // function getAWSClient() {
 //   return s3.createClient({
 //     s3Options: {
@@ -13,13 +14,12 @@ const mysql2 = require('mysql2/promise');
 //   });
 // }
 
-function newLocalDB(dbName: string, password: string): Promise<Obj> {
-  return mysql2.createConnection({
-    host: 'localhost',
-    user: 'root',
-    database: dbName,
-    password,
-  });
-}
+const newLocalDB = (dbName: string, password: string): Promise<Obj> => mysql2.createConnection({
+  host: 'localhost',
+  user: 'root',
+  database: dbName,
+  password,
+});
+
 
 module.exports = { newLocalDB };
