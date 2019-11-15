@@ -40,23 +40,6 @@ async function main() {
   console.log(categoryMap);
   // const catQuery = directus.createCategoriesImport(categoryMap);
   // const deleteArticles = 'DELETE FROM articles;\n';
-  // const insertStart = `INSERT INTO articles (
-  //   \`status\`,
-  //   created_by,
-  //   modified_by,
-  //   created_on,
-  //   modified_on,
-  //   title,
-  //   body,
-  //   tags,
-  //   featured_image,
-  //   featured_image_caption,
-  //   excerpt,
-  //   category,
-  //   slug,
-  //   legacy_slug
-  // )
-  // VALUES `;
   // const articles: Array<DrupalArticle> = await getDrupal(db);
   // const articleQueryArray = [];
   // articles.forEach((article) => {
@@ -65,7 +48,7 @@ async function main() {
   // await Promise.all(articleQueryArray);
   // fs.writeFile(
   //   'import.sql',
-  //   `${(await catQuery) + deleteArticles + insertStart + articleQueryArray.join(',')};`,
+  //   `${(await catQuery) + deleteArticles + drupal.insertArticleStart + articleQueryArray.join(',')};`,
   //   (err) => {
   //     if (err) throw err;
   //   },

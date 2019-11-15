@@ -51,6 +51,24 @@ function unixToSQLDate(unixts: number) {
     .replace('T', ' ');
 }
 
+const insertArticleStart = `INSERT INTO articles (
+    \`status\`,
+    created_by,
+    modified_by,
+    created_on,
+    modified_on,
+    title,
+    body,
+    tags,
+    featured_image,
+    featured_image_caption,
+    excerpt,
+    category,
+    slug,
+    legacy_slug
+  )
+  VALUES `;
+
 async function createArticleValueSetQuery(
   db: Obj,
   article: DrupalArticle,
@@ -77,4 +95,6 @@ async function createArticleValueSetQuery(
   return values;
 }
 
-module.exports = { uploadImage, createCategoriesImport, createArticleValueSetQuery };
+module.exports = {
+  uploadImage, createCategoriesImport, createArticleValueSetQuery, insertArticleStart,
+};
