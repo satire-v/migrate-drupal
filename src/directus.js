@@ -7,13 +7,13 @@ const slug = require('slug');
 
 const drupal = require('./drupal');
 
-// TODO programmatic
 const createCategoriesImport = (categoryMap: Obj): string => {
   let query = 'DELETE FROM categories;\nINSERT INTO categories (`name`, id) VALUES';
+  const queryArray = [];
   Object.keys(categoryMap).forEach((key) => {
-    query += `('${key}', ${categoryMap[key]})`;
+    queryArray.push(`('${key}', ${categoryMap[key]})`);
   });
-  query += ';';
+  query += `${queryArray.join(',')};\n`;
   return query;
 };
 
@@ -44,6 +44,7 @@ const createArticleValueSetQuery = async (
   db: Obj,
   article: DrupalArticle,
   categoryMap: Obj,
+  bar: Obj,
 ): Promise<string> => {
   const pub = article.status ? 'published' : 'draft';
   const created = unixToSQLDate(article.created);
@@ -57,15 +58,15 @@ const createArticleValueSetQuery = async (
     lower: true,
   });
   const legacySlug = mysql2.escape(article.relative_uri);
-  const { imageID } = await drupal.drupalToDirectusImage(
-    article.image_uri,
-    article.relative_uri,
-  );
+  const { imageID } = await drupal.drupalToDirectusImage(article.image_uri, article.relative_uri);
   const body = mysql2.escape(await drupal.processHTMLInlineFileTags(db, article));
   const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${imageID}, ${caption}, ${teaser}, ${categoryID}, '${newSlug}', ${legacySlug})`;
+  bar.increment();
   return values;
 };
 
 module.exports = {
-  createCategoriesImport, createArticleValueSetQuery, insertArticleStart,
+  createCategoriesImport,
+  createArticleValueSetQuery,
+  insertArticleStart,
 };

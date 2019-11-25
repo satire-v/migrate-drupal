@@ -10,7 +10,6 @@ const getFileNameFromUri = (uri: string): string => {
   return s[s.length - 1];
 };
 
-
 const uploadImageDirectus = async (
   imageBase64: string,
   fileName: string,
@@ -18,8 +17,8 @@ const uploadImageDirectus = async (
 ): Promise<{ fullUri: string, imageID: number }> => {
   const options: Obj = {
     method: 'POST',
-    url: 'http://admin.satirev.org/_/files',
-    project: '_', // default
+    url: 'http://api.satirev.org/satire-v/files',
+    project: 'satire-v',
     auth: {
       // static auth token
       bearer: 'letmeinyoubitch',
@@ -36,6 +35,5 @@ const uploadImageDirectus = async (
   // and id for database linking
   return { fullUri: content.data.data.full_url, imageID: content.data.id };
 };
-
 
 module.exports = { getFileNameFromUri, sanitizeUri, uploadImageDirectus };
