@@ -16,7 +16,7 @@
     "axois": "0.0.1-security",
     "cheerio": "^1.0.0-rc.3",
     "cli-progress": "^3.4.0",
-    "gatsby-cli": "^2.8.13",
+    "@directus/sdk-js": "^6.0.0-beta.6",
     "mysql2": "^2.0.1",
     "react": "^16.12.0",
     "request": "^2.88.0",
