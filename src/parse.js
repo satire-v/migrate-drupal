@@ -4,12 +4,11 @@ import type { Obj } from './utils';
 
 const fs = require('fs');
 
-const cliProgress = require('cli-progress');
 const yargs = require('yargs');
 
 const database = require('./database');
-const directus = require('./directus');
-const drupal = require('./drupal');
+const Directus = require('./directus');
+const Drupal = require('./drupal');
 
 const { argv } = yargs
   .option('db', {
@@ -23,7 +22,7 @@ const { argv } = yargs
     description: 'The password to the local database',
     type: 'string',
   })
-  .option('article_count', {
+  .option('articleCount', {
     alias: 'n',
     description: 'Number of articles to write to import',
     type: 'number',
@@ -36,20 +35,22 @@ const { argv } = yargs
     'Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)',
   );
 
-const getDrupal = (db: Obj): Promise<Array<DrupalArticle>> => drupal.getAllArticles(db);
+const getDrupal = (drupal: Obj): Promise<Array<DrupalArticle>> => drupal.getAllArticles();
 
-const main = async () => {
+async function main() {
   const db = await database.newLocalDB(argv.db, argv.password);
-  const categoryMap = await drupal.getDrupalCategoriesMap(db);
-  const catQuery = directus.createCategoriesImport(categoryMap);
+
+  const drupal = new Drupal(db, false);
+  const directus = new Directus(drupal);
+  const categoryMap = await drupal.getDrupalCategoriesMap();
+  const catQuery = Directus.createCategoriesImport(categoryMap);
   const deleteArticles = 'DELETE FROM articles;\n';
-  const articles: Array<DrupalArticle> = await getDrupal(db);
-  const bar = new cliProgress.SingleBar({ format: 'Articles parsed: {value}/{total}' });
-  bar.start(argv.n ?? articles.length, 0);
+  const articles: Array<DrupalArticle> = await getDrupal(drupal);
+  drupal.createMainBar(argv.articleCount ?? articles.length);
   const articleQueryArray = [];
-  const articlesToGet = argv.n ? articles.slice(0, argv.n) : articles;
+  const articlesToGet = argv.articleCount ? articles.slice(0, argv.articleCount) : articles;
   articlesToGet.forEach((article) => {
-    articleQueryArray.push(directus.createArticleValueSetQuery(db, article, categoryMap, bar));
+    articleQueryArray.push(directus.createArticleValueSetQuery(article, categoryMap));
   });
 
   const articlesProcessed = await Promise.all(articleQueryArray);
@@ -57,14 +58,14 @@ const main = async () => {
     'import.sql',
     `${(await catQuery)
       + deleteArticles
-      + directus.insertArticleStart
+      + Directus.insertArticleStart()
       + articlesProcessed.join(',')};`,
     (err) => {
       if (err) throw err;
     },
   );
-  bar.stop();
-  await db.end();
-};
+  drupal.stopMultibar();
+  await drupal.stopDB();
+}
 
 main();
