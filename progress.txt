@@ -1,0 +1,10 @@
+
+> miragtion-satirev@1.0.0 test /Users/jacob/websites-dev/migrate-satirev
+> npm run build && node ./lib/parse.js "-p" "mysqlmysql" "-n" "10"
+
+
+> miragtion-satirev@1.0.0 build /Users/jacob/websites-dev/migrate-satirev
+> babel src -d lib --source-maps
+
+Successfully compiled 6 files with Babel.
+

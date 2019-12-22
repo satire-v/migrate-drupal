@@ -19,3 +19,4 @@ rules:
   no-console: 1
   import/order: ["warn", { "newlines-between": "always" }]
   sort-imports-es6-autofix/sort-imports-es6: 1
+  max-classes-per-file: 0

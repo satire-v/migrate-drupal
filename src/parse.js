@@ -1,6 +1,5 @@
 // @flow
 import type { DrupalArticle } from './drupal';
-import type { Obj } from './utils';
 
 const fs = require('fs');
 
@@ -35,22 +34,22 @@ const { argv } = yargs
     'Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)',
   );
 
-const getDrupal = (drupal: Obj): Promise<Array<DrupalArticle>> => drupal.getAllArticles();
+const getDrupal = (drupal: Drupal): Promise<Array<DrupalArticle>> => drupal.genAllArticles();
 
 async function main() {
   const db = await database.newLocalDB(argv.db, argv.password);
 
-  const drupal = new Drupal(db, false);
+  const drupal = new Drupal(db, true);
   const directus = new Directus(drupal);
-  const categoryMap = await drupal.getDrupalCategoriesMap();
+  const categoryMap = await drupal.genDrupalCategoriesMap();
   const catQuery = Directus.createCategoriesImport(categoryMap);
   const deleteArticles = 'DELETE FROM articles;\n';
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
-  drupal.createMainBar(argv.articleCount ?? articles.length);
+  drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
   const articleQueryArray = [];
   const articlesToGet = argv.articleCount ? articles.slice(0, argv.articleCount) : articles;
   articlesToGet.forEach((article) => {
-    articleQueryArray.push(directus.createArticleValueSetQuery(article, categoryMap));
+    articleQueryArray.push(directus.createArticleImportQuery(article, categoryMap));
   });
 
   const articlesProcessed = await Promise.all(articleQueryArray);
