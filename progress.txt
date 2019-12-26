@@ -1,10 +1,6 @@
+0/1 | 0% | ---------------------------------------- | Articles
+93508/93508 | 100% | ======================================== | File: clover.jpg
 
-> miragtion-satirev@1.0.0 test /Users/jacob/websites-dev/migrate-satirev
-> npm run build && node ./lib/parse.js "-p" "mysqlmysql" "-n" "10"
-
-
-> miragtion-satirev@1.0.0 build /Users/jacob/websites-dev/migrate-satirev
-> babel src -d lib --source-maps
-
-Successfully compiled 6 files with Babel.
-
+1/1 | 100% | ======================================== | Articles
+93508/93508 | 100% | ======================================== | File: clover.jpg
+43/43 | 100% | ======================================== | File: cleardot.gif

@@ -4,6 +4,7 @@ import type { DrupalArticle } from './drupal';
 const fs = require('fs');
 
 const yargs = require('yargs');
+const Promise = require('bluebird');
 
 const database = require('./database');
 const Directus = require('./directus');
@@ -46,13 +47,10 @@ async function main() {
   const deleteArticles = 'DELETE FROM articles;\n';
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
   drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
-  const articleQueryArray = [];
   const articlesToGet = argv.articleCount ? articles.slice(0, argv.articleCount) : articles;
-  articlesToGet.forEach((article) => {
-    articleQueryArray.push(directus.createArticleImportQuery(article, categoryMap));
-  });
+  // eslint-disable-next-line max-len
+  const articlesProcessed = await Promise.map(articlesToGet, (article) => directus.createArticleImportQuery(article, categoryMap));
 
-  const articlesProcessed = await Promise.all(articleQueryArray);
   fs.writeFile(
     'import.sql',
     `${(await catQuery)

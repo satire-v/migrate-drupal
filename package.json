@@ -13,10 +13,11 @@
   "dependencies": {
     "@babel/plugin-proposal-nullish-coalescing-operator": "^7.7.4",
     "@directus/sdk-js": "^6.0.0",
-    "axios": "^0.19.0",
     "axois": "0.0.1-security",
+    "bluebird": "^3.7.2",
     "cheerio": "^1.0.0-rc.3",
     "cli-progress": "^3.4.0",
+    "file-type": "^12.4.2",
     "mysql2": "^2.0.2",
     "react": "^16.12.0",
     "request": "^2.88.0",

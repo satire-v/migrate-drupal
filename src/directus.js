@@ -1,10 +1,12 @@
 // @flow
+
 import type { DrupalArticle } from './drupal';
 import type { Obj } from './utils';
 
 const mysql2 = require('mysql2');
 const slug = require('slug');
-const request = require('request-promise-native');
+const requestPromise = require('request-promise-native');
+const request = require('request');
 
 const Drupal = require('./drupal');
 
@@ -17,8 +19,9 @@ class Directus {
   }
 
   static async uploadImage(
+    fileData: Buffer | request.Request,
     fileName: string,
-    req: request,
+    fileMimeType: string,
   ): Promise<{ fullUri: string, imageID: number }> {
     const options: Obj = {
       url: 'http://api.satirev.org/satire-v/files',
@@ -30,10 +33,16 @@ class Directus {
       formData: {
         filename_disk: fileName,
         filename_download: fileName,
-        data: req,
+        data: {
+          value: fileData,
+          options: {
+            filename: fileName,
+            contentType: fileMimeType,
+          },
+        },
       },
     };
-    let content = await request.post(options);
+    let content = await requestPromise.post(options);
     content = JSON.parse(content);
 
     // return url for sourcing
