@@ -101,7 +101,10 @@ class Directus {
     const tags = mysql2.escape(article.tags_info);
     const caption = mysql2.escape(article.caption);
     const teaser = mysql2.escape(article.teaser);
-    const categoryID = categoryMap[article.category_name];
+    let categoryID = categoryMap[article.category_name];
+    if (categoryID == null) {
+      categoryID = categoryMap['Everything Else'];
+    }
     const newSlug = slug(article.title, {
       lower: true,
     });

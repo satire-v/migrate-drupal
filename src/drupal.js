@@ -3,7 +3,6 @@ import type { Obj } from './utils';
 
 const { Buffer } = require('buffer');
 const fs = require('fs');
-const stream = require('stream');
 
 const request = require('request');
 const requestPromise = require('request-promise-native');
