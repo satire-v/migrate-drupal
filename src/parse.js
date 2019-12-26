@@ -47,9 +47,13 @@ async function main() {
   const deleteArticles = 'DELETE FROM articles;\n';
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
   drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
+  drupal.createFilesProgressBar();
   const articlesToGet = argv.articleCount ? articles.slice(0, argv.articleCount) : articles;
-  // eslint-disable-next-line max-len
-  const articlesProcessed = await Promise.map(articlesToGet, (article) => directus.createArticleImportQuery(article, categoryMap));
+  const articlesProcessed = await Promise.map(
+    articlesToGet,
+    (article) => directus.createArticleImportQuery(article, categoryMap),
+    { concurrency: 10 },
+  );
 
   fs.writeFile(
     'import.sql',

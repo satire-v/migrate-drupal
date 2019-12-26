@@ -1,8 +1,6 @@
 // @flow
 const fs = require('fs');
 
-const fileType = require('file-type');
-
 export type Obj = { [key: string | number]: any };
 
 const sanitizeUri = (uri: string): string => uri.replace(/[^0-9a-zA-Z-]/g, '');

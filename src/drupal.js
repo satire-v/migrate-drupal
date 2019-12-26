@@ -3,10 +3,10 @@ import type { Obj } from './utils';
 
 const { Buffer } = require('buffer');
 const fs = require('fs');
+const stream = require('stream');
 
 const request = require('request');
 const requestPromise = require('request-promise-native');
-const fileType = require('file-type');
 const Promise = require('bluebird');
 const cheerio = require('cheerio');
 const cliProgress = require('cli-progress');
@@ -42,23 +42,28 @@ class Drupal {
 
   db: Obj;
 
+  consolidateProgressBars: boolean;
+
   articleProgressBar: ?Obj;
+
+  filesProgressBar: ?Obj;
+
+  fileByteTotal: number;
 
   uploadFileFn: UploadFileFn;
 
-  constructor(db: Obj, hasMultibar: boolean = true) {
-    this.multibar = hasMultibar
-      ? new cliProgress.MultiBar({
-        format: '{value}/{total} | {percentage}% | {bar} | {message}',
-        clearOnComplete: false,
-        stream: fs.createWriteStream('./progress.txt'),
-        noTTYOutput: true,
-        notTTYSchedule: 5000,
-        forceRedraw: true,
-        // hideCursor: true,
-      })
-      : null;
+  constructor(db: Obj, consolidateProgressBars: boolean = true) {
+    this.multibar = new cliProgress.MultiBar({
+      format: '{value}/{total} | {percentage}% | {bar} | {message}',
+      clearOnComplete: false,
+      stream: consolidateProgressBars ? process.stderr : fs.createWriteStream('./progress.txt'),
+      noTTYOutput: !consolidateProgressBars,
+      notTTYSchedule: consolidateProgressBars ? 0 : 5000,
+      forceRedraw: !consolidateProgressBars,
+    });
     this.db = db;
+    this.fileByteTotal = 0;
+    this.consolidateProgressBars = consolidateProgressBars;
   }
 
   newArticleProcessor() {
@@ -95,6 +100,22 @@ class Drupal {
         message: `File: ${fileName}`,
       })
     );
+  }
+
+  createFilesProgressBar() {
+    this.filesProgressBar = this.multibar
+      && this.multibar.create(this.fileByteTotal, 0, {
+        message: 'Files',
+      });
+  }
+
+  increaseFilesBarTotal(delta: number) {
+    this.fileByteTotal += delta;
+    return this.filesProgressBar && this.filesProgressBar.setTotal(this.fileByteTotal);
+  }
+
+  incrementFilesBar(delta: number) {
+    return this.filesProgressBar && this.filesProgressBar.increment(delta);
   }
 
   static setTotal(bar: ?Obj, total: number) {
@@ -181,7 +202,7 @@ class Drupal {
     const [entries] = await this.db.query(Drupal.getDrupalCategoriesQuery());
     const categories = {};
     entries.forEach((entry) => {
-      categories[entry.name] = entry.tid; // eslint-disable-line no-param-reassign
+      categories[entry.name] = entry.tid;
     });
     return categories;
   }
@@ -239,15 +260,26 @@ class DrupalArticleProcessor {
     }
     const fileNameExt = utils.validateImageExt(fileName, ext);
 
-    const bar = this.drupal.createFileProgressBar(fileNameExt);
+    let bar = null;
+    if (!this.drupal.consolidateProgressBars) {
+      bar = this.drupal.createFileProgressBar(fileNameExt);
+    }
 
     const reqStream = request
       .get(fullUri, options)
       .on('response', (response) => {
-        Drupal.setTotal(bar, parseInt(response.headers['content-length'], 10));
+        if (!this.drupal.consolidateProgressBars) {
+          Drupal.setTotal(bar, parseInt(response.headers['content-length'], 10));
+        } else {
+          this.drupal.increaseFilesBarTotal(parseInt(response.headers['content-length'], 10));
+        }
       })
       .on('data', (chunk) => {
-        Drupal.increment(bar, chunk.length);
+        if (!this.drupal.consolidateProgressBars) {
+          Drupal.increment(bar, chunk.length);
+        } else {
+          this.drupal.incrementFilesBar(chunk.length);
+        }
       });
     return { reqStream, fileNameExt, imgType: `image/${ext}` };
   }
@@ -289,7 +321,7 @@ class DrupalArticleProcessor {
         .sanitizeUri(utils.getFileNameFromUri(relativeUri))
         .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split('/')[1]}`;
       this.i += 1;
-      const buf = Buffer.from(base64src, 'base64');
+      const buf = Buffer.from(base64src);
       fileData = buf;
     } else {
       // public file somwhere
@@ -335,17 +367,14 @@ class DrupalArticleProcessor {
 
   async genProcessHTMLImageTags(htmlBody: string, relativeUri: string): Promise<string> {
     const $ = cheerio.load(htmlBody);
-    const promises = $('img')
-      .toArray()
-      .map(async (el) => {
-        const src = $(el).attr('src');
-        const { fullUri } = await this.drupalToDirectusImage(src, relativeUri);
-        if (fullUri == null) {
-          return;
-        }
-        $(el).attr('src', fullUri);
-      });
-    await Promise.all(promises);
+    await Promise.map($('img').toArray(), async (el) => {
+      const src = $(el).attr('src');
+      const { fullUri } = await this.drupalToDirectusImage(src, relativeUri);
+      if (fullUri == null) {
+        return;
+      }
+      $(el).attr('src', fullUri);
+    });
     return $.html();
   }
 
