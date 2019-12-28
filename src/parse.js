@@ -47,7 +47,7 @@ async function main() {
   const deleteArticles = 'DELETE FROM articles;\n';
   const ids = await Directus.getImageIds();
   if (ids.data.length !== 0) await Directus.deleteImages(ids.data);
-  console.log('Deleted existing images');
+  drupal.fileDebugStream.write('Deleted existing images\n');
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
   drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
   drupal.createFilesProgressBar();
