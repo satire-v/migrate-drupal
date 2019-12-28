@@ -45,6 +45,9 @@ async function main() {
   const categoryMap = await drupal.genDrupalCategoriesMap();
   const catQuery = Directus.createCategoriesImport(categoryMap);
   const deleteArticles = 'DELETE FROM articles;\n';
+  const ids = await Directus.getImageIds();
+  if (ids.data.length !== 0) await Directus.deleteImages(ids.data);
+  console.log('Deleted existing images');
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
   drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
   drupal.createFilesProgressBar();
@@ -52,7 +55,7 @@ async function main() {
   const articlesProcessed = await Promise.map(
     articlesToGet,
     (article) => directus.createArticleImportQuery(article, categoryMap),
-    { concurrency: 10 },
+    { concurrency: 0 },
   );
 
   fs.writeFile(
@@ -65,6 +68,7 @@ async function main() {
       if (err) throw err;
     },
   );
+  drupal.fileDebugStream.end('DONE');
   drupal.stopMultibar();
   await drupal.stopDB();
 }

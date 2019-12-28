@@ -1,11 +1,7 @@
 // @flow
-const fs = require('fs');
-
 export type Obj = { [key: string | number]: any };
 
 const sanitizeUri = (uri: string): string => uri.replace(/[^0-9a-zA-Z-]/g, '');
-
-const file = fs.createWriteStream('./files.txt');
 
 const getFileNameFromUri = (uri: string): string => {
   const s = uri.split('/');
@@ -19,7 +15,7 @@ function getValidExt(fileName: string): false | string {
     return false;
   }
   const ext = parts[parts.length - 1];
-  if (['png', 'jpg', 'jpeg'].includes(ext)) return ext;
+  if (['png', 'jpg', 'jpeg', 'JPG'].includes(ext)) return ext;
   return false;
 }
 
@@ -33,7 +29,6 @@ function validateImageExt(fileName: string, ext: string): string {
     parts.pop();
     fileNameExt = `${parts.join('.').slice(0, 25)}.${ext}`;
   }
-  file.write(`${fileNameExt}\n`);
   return fileNameExt;
 }
 

@@ -24,6 +24,7 @@
     "request-promise-native": "^1.0.8",
     "s3": "^4.4.0",
     "slug": "^1.1.0",
+    "wtfnode": "^0.8.1",
     "yargs": "^14.2.2"
   },
   "devDependencies": {

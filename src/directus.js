@@ -7,7 +7,6 @@ const mysql2 = require('mysql2');
 const slug = require('slug');
 const requestPromise = require('request-promise-native');
 const request = require('request');
-const retry = require('bluebird-retry');
 
 const Drupal = require('./drupal');
 
@@ -16,21 +15,52 @@ class Directus {
 
   constructor(drupal: Drupal) {
     this.drupal = drupal; // instance of a drupal object/module
-    this.drupal.setUploadFn(Directus.uploadImage);
+    this.drupal.setUploadFn(this.uploadImage.bind(this));
   }
 
-  static async uploadImage(
-    fileData: Buffer | request.Request,
-    fileName: string,
-    fileMimeType: string,
-  ): Promise<{ fullUri: string, imageID: number }> {
+  static async getImageIds(): Promise<any> {
     const options: Obj = {
+      method: 'get',
       url: 'http://api.satirev.org/satire-v/files',
       project: 'satire-v',
       auth: {
         // static auth token
         bearer: 'letmeinyoubitch',
       },
+      qs: {
+        fields: 'id',
+      },
+    };
+    return JSON.parse(await requestPromise.get(options));
+  }
+
+  static async deleteImages(ids: Array<{ id: number }>): Promise<any> {
+    const options: Obj = {
+      method: 'delete',
+      url: `http://api.satirev.org/satire-v/files/${ids.map((e) => e.id).join(',')}`,
+      project: 'satire-v',
+      auth: {
+        // static auth token
+        bearer: 'letmeinyoubitch',
+      },
+    };
+    return requestPromise.delete(options);
+  }
+
+  async uploadImage(
+    fileData: Buffer | request.Request,
+    fileName: string,
+    fileMimeType: string,
+  ): Promise<{ fullUri: string, fileName: string, imageID: number }> {
+    const options: Obj = {
+      method: 'post',
+      url: 'http://api.satirev.org/satire-v/files',
+      project: 'satire-v',
+      auth: {
+        // static auth token
+        bearer: 'letmeinyoubitch',
+      },
+      timeout: this.drupal.fileTimeout,
       formData: {
         filename_disk: fileName,
         filename_download: fileName,
@@ -44,13 +74,22 @@ class Directus {
       },
     };
 
-    let content = await retry(() => requestPromise.post(options));
-    content = JSON.parse(content);
+    this.drupal.fileDebugStream.write(`Trying to upload ${fileName}\n`);
+    const content = await requestPromise
+      .post(options)
+      .catch((err) => {
+        throw new Error(`Failed uploading ${fileName}: ${err}`);
+      })
+      .then((res) => {
+        this.drupal.fileDebugStream.write(`Succeeded in uploading ${fileName}\n`);
+        return JSON.parse(res);
+      });
 
     // return url for sourcing
     // and id for database linking
     return {
       fullUri: content.data.data.full_url,
+      fileName,
       imageID: content.data.id,
     };
   }
