@@ -74,7 +74,7 @@ class Drupal {
     this.consolidateProgressBars = consolidateProgressBars;
     this.fileDebugStream = fs.createWriteStream('./debug.txt');
     this.files = new Set();
-    this.fileTimeout = 10000;
+    this.fileTimeout = 15000;
   }
 
   newArticleProcessor() {
@@ -222,9 +222,17 @@ class Drupal {
    * Parsing util functions
    */
 
-  static parseExternalImageInfo(localUri: string): { fullUri: string, fileNameExisting: string } {
+  static parseManagedImageInfo(
+    localUri: string,
+  ): { fullUris: Array<string>, fileNameExisting: string } {
     return {
-      fullUri: localUri.replace('public://', 'http://satirev.org/sites/default/files/'),
+      fullUris: [
+        localUri.replace(
+          'public://',
+          'http://satirev.org/sites/default/files/styles/original_cropped/public/',
+        ),
+        localUri.replace('public://', 'http://satirev.org/sites/default/files/'),
+      ],
       fileNameExisting: utils.getFileNameFromUri(localUri),
     };
   }
@@ -237,6 +245,10 @@ class Drupal {
       else res = res || this.findFID(obj[key]);
     });
     return res;
+  }
+
+  static isBase64(src: string): boolean {
+    return !!src.match(/.*data:image.*/);
   }
 }
 
@@ -255,7 +267,7 @@ class DrupalArticleProcessor {
    */
 
   async downloadImage(
-    fullUri: string,
+    uris: Array<string>,
   ): Promise<{ reqStream: request.Request, fileNameExt: string, imgType: string }> {
     const options = {
       encoding: null,
@@ -264,6 +276,30 @@ class DrupalArticleProcessor {
       },
       timeout: this.drupal.fileTimeout,
     };
+
+    if (uris.length === 0) {
+      throw new Error('No uris given for image\n');
+    }
+
+    let fullUri = null;
+    if (uris.length === 1) {
+      [fullUri] = uris;
+    } else if (uris.length > 1) {
+      await Promise.mapSeries(uris, async (uri) => {
+        const response = await requestPromise.head(uri).catch(() => false);
+        if (response) {
+          fullUri = uri;
+          throw new Error({ code: 'success' });
+        } else {
+          return false;
+        }
+      }).catch(() => {});
+    }
+
+    if (fullUri == null) {
+      throw new Error('No uri gotten for image\n');
+    }
+
     const fileName = utils.getFileNameFromUri(fullUri);
     let ext = utils.getValidExt(fileName);
     if (ext === false) {
@@ -311,7 +347,11 @@ class DrupalArticleProcessor {
     if (this.drupal.consolidateProgressBars) {
       this.drupal.increaseFilesBarTotal(1);
     }
+
+    // dont need more than that for logging purposes
+    // and the real file name might need the MIME type fetched
     const logName = utils.getFileNameFromUri(src).slice(0, 25);
+
     this.drupal.files.add(logName);
     const res = await retry(
       async () => {
@@ -364,53 +404,55 @@ class DrupalArticleProcessor {
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
   }
 
+  parseBase64ImgSrc(
+    src: string,
+    relativeUri: string,
+  ): { fileData: Buffer, fileName: string, fileMimeType: string } {
+    // base 64 image
+    const block = src.split(';');
+    let [fileMimeType, base64src] = block;
+    [, fileMimeType] = fileMimeType.split(':');
+    [, base64src] = base64src.split(',');
+    const fileName = `${utils
+      .sanitizeUri(utils.getFileNameFromUri(relativeUri))
+      .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split('/')[1]}`;
+    this.i += 1;
+    const buf = Buffer.from(base64src, 'base64');
+    this.drupal.fileDebugStream.write(`Have base64 ${fileName}\n`);
+    return { fileData: buf, fileName, fileMimeType };
+  }
+
+  async parseUriImgSrc(
+    src: string,
+  ): Promise<{ fileData: request.Request, fileName: string, fileMimeType: string }> {
+    let uris = [];
+    // public file somwhere
+    if (src.match(/^public:\/\/.*/)) {
+      // on server
+      const { fullUris } = Drupal.parseManagedImageInfo(src);
+      uris = uris.concat(fullUris);
+    } else {
+      // somewhere else
+      uris.push(src);
+    }
+    const res = await this.downloadImage(uris).catch((err) => {
+      throw new Error(`Error in download function: ${err}`);
+    });
+    return {
+      fileData: res.reqStream,
+      fileName: res.fileNameExt,
+      fileMimeType: res.imgType,
+    };
+  }
+
   async genDataFromSrc(
     src: string,
     relativeUri: string,
   ): Promise<{ fileData: Buffer | request.Request, fileName: string, fileMimeType: string }> {
-    let fileData = null;
-    let fileName = '';
-    let fileMimeType = '';
-    if (src.match(/.*data:image.*/)) {
-      // base 64 image
-      const block = src.split(';');
-      let base64src = null;
-      [fileMimeType, base64src] = block;
-      [, fileMimeType] = fileMimeType.split(':');
-      [, base64src] = base64src.split(',');
-      fileName = `${utils
-        .sanitizeUri(utils.getFileNameFromUri(relativeUri))
-        .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split('/')[1]}`;
-      this.i += 1;
-      const buf = Buffer.from(base64src, 'base64');
-      fileData = buf;
-      this.drupal.fileDebugStream.write(`Have base64 ${fileName}\n`);
-    } else {
-      // public file somwhere
-      let fullUri = null;
-      if (src.match(/^public:\/\/.*/)) {
-        // on server
-        const res = Drupal.parseExternalImageInfo(src);
-        fullUri = res.fullUri;
-      } else {
-        // somewhere else
-        fullUri = src;
-      }
-      const res = await this.downloadImage(fullUri).catch((err) => {
-        throw new Error(`Error in download function: ${err}`);
-      });
-      fileData = res.reqStream;
-      fileName = res.fileNameExt;
-      fileMimeType = res.imgType;
+    if (Drupal.isBase64(src)) {
+      return this.parseBase64ImgSrc(src, relativeUri);
     }
-    if (fileData === null) {
-      throw new Error('something went wrong creating the file read req');
-    }
-    if (fileName === '') {
-      throw new Error('no filename found');
-    }
-
-    return { fileName, fileData, fileMimeType };
+    return this.parseUriImgSrc(src);
   }
 
   /*
