@@ -461,14 +461,15 @@ class DrupalArticleProcessor {
 
   async genProcessManagedToPublicFiles(htmlBody: string): Promise<string> {
     const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
+    let newBody = htmlBody;
     if (managedFiles != null) {
       await Promise.each(managedFiles, async (fileObjStr) => {
         const fileObj = JSON.parse(fileObjStr);
         const repl = await this.genManagedFileToHTMLTag(fileObj);
-        htmlBody.replace(fileObjStr, repl);
+        newBody = newBody.replace(fileObjStr, repl);
       });
     }
-    return htmlBody;
+    return newBody;
   }
 
   async genProcessHTMLImageTags(htmlBody: string, relativeUri: string): Promise<string> {
