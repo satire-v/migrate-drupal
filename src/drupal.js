@@ -1,4 +1,5 @@
 // @flow
+import type { CategoryMap } from './directus';
 import type { Obj } from './utils';
 
 const { Buffer } = require('buffer');
@@ -7,9 +8,13 @@ const stream = require('stream');
 
 const request = require('request');
 const requestPromise = require('request-promise-native');
+// Bluebird has some nice Promise.All type functions
 const Promise = require('bluebird');
+// To make SURE image gets uploaded
 const retry = require('bluebird-retry');
+// HTML parsing lib
 const cheerio = require('cheerio');
+// Progress bar. Fun.
 const cliProgress = require('cli-progress');
 
 const utils = require('./utils');
@@ -32,31 +37,45 @@ export type DrupalArticle = {
   tags_info: string,
 };
 
+// See uploadImage fn in Directus
 export type UploadFileFn = (
   fileData: Buffer | request.Request,
   fileName: string,
   fileMimeType: string,
 ) => Promise<{ fullUri: string, imageID: number }>;
 
+/* Drupal class/object, which houses the progress of the migration,
+as well as logging info. Makes it easier to use universal objects
+without passing them between functions */
 class Drupal {
+  // If you want a progress bar for each article
   multibar: ?Obj;
 
+  // db connection (localhost)
   db: Obj;
 
+  // Just one for all files. Much easier, but not as informative if you want to know what's hanging
   consolidateProgressBars: boolean;
 
+  // Progress bar for articles
   articleProgressBar: ?Obj;
 
+  // Progress bar for files. Different than articles bc of inline images
   filesProgressBar: ?Obj;
 
+  // For file upload percentage purposes
   fileByteTotal: number;
 
+  // Passed from Directus. Otherwise you get cyclical dependencies
   uploadFileFn: UploadFileFn;
 
+  // File to write debug info to
   fileDebugStream: stream.Writable;
 
+  // Used to keep track of which files have started, are in process, and have finished
   files: Set<string>;
 
+  // How long before it just retries the whole download/upload process
   fileTimeout: number;
 
   constructor(db: Obj, consolidateProgressBars: boolean = true) {
@@ -209,7 +228,7 @@ class Drupal {
     return articles;
   }
 
-  async genDrupalCategoriesMap(): Promise<{ [string]: number }> {
+  async genDrupalCategoriesMap(): Promise<CategoryMap> {
     const [entries] = await this.db.query(Drupal.getDrupalCategoriesQuery());
     const categories = {};
     entries.forEach((entry) => {
@@ -489,7 +508,7 @@ class DrupalArticleProcessor {
     return $.html();
   }
 
-  async processHTMLInlineFileTags(postData: DrupalArticle): Promise<string> {
+  async genProcessHTMLInlineFileTags(postData: DrupalArticle): Promise<string> {
     const res1 = await this.genProcessManagedToPublicFiles(postData.body);
     const res2 = this.genProcessHTMLImageTags(res1, postData.relative_uri);
     return res2;
