@@ -12,11 +12,17 @@ globals:
 parserOptions:
   ecmaVersion: 2019
   sourceType: module
-plugins: [flowtype, babel, jsx-a11y, sort-imports-es6-autofix]
+plugins: [flowtype, babel, jsx-a11y]
 parser: babel-eslint
 rules:
   no-unused-vars: 1
   no-console: 1
-  import/order: ["warn", { "newlines-between": "always" }]
-  sort-imports-es6-autofix/sort-imports-es6: 1
+  import/order:
+    [
+      warn,
+      {
+        newlines-between: always,
+        alphabetize: { order: desc, caseInsensitive: true },
+      },
+    ]
   max-classes-per-file: 0
