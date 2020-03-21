@@ -1,5 +1,3 @@
-// @flow
-
 export type Obj = Record<string | number, any>;
 
 export function sanitizeUri(uri: string): string {

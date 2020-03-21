@@ -10,6 +10,7 @@
     "strictNullChecks": true,
     "baseUrl": "./",
     "allowJs": false,
+    "downlevelIteration": true,
     "typeRoots": ["./types", "./node_modules/@types"]
   },
   "exclude": ["node_modules", "lib"]

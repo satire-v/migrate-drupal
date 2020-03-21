@@ -1,20 +1,18 @@
-// @flow
-
-import type { Obj } from './utils';
-import type { DrupalArticle } from './drupal';
-
-const Drupal = require('./drupal');
-
-const slug = require('slug');
+/* eslint-disable @typescript-eslint/camelcase */
+import slug from 'slug';
 // slugifying library. same as Directus, I believe
 // yes, i'm using both
-const requestPromise = require('request-promise-native');
-const request = require('request');
-const mysql2 = require('mysql2');
+import requestPromise from 'request-promise-native';
+import request from 'request';
+import mysql2 from 'mysql2';
+
+import type { Obj } from './utils';
+import Drupal from './drupal';
+import type { DrupalArticle } from './drupal';
 
 
 // See below function, but just flow typing for a map of category name to category id
-export type CategoryMap = { [string]: number };
+export interface CategoryMap { [name: string]: number };
 
 // Directus main class
 class Directus {
@@ -211,4 +209,4 @@ class Directus {
   }
 }
 
-module.exports = Directus;
+export default Directus;

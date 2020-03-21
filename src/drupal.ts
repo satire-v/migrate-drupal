@@ -1,11 +1,10 @@
-// @flow
-import stream from "stream";
+import {Writable} from "stream";
 import fs from "fs";
 import { Buffer } from "buffer";
 
 import requestPromise from "request-promise-native";
 import request from "request";
-import cliProgress from "cli-progress";
+import cliProgress, {MultiBar, SingleBar} from "cli-progress";
 import cheerio from "cheerio";
 import retry from "bluebird-retry";
 import Promise from "bluebird";
@@ -48,7 +47,7 @@ as well as logging info. Makes it easier to use universal objects
 without passing them between functions */
 class Drupal {
   // If you want a progress bar for each article
-  multibar: Obj | null;
+  multibar: MultiBar | null;
 
   // db connection (localhost)
   db: Obj;
@@ -57,10 +56,10 @@ class Drupal {
   consolidateProgressBars: boolean;
 
   // Progress bar for articles
-  articleProgressBar: Obj | null;
+  articleProgressBar: SingleBar | null;
 
   // Progress bar for files. Different than articles bc of inline images
-  filesProgressBar: Obj | null;
+  filesProgressBar: SingleBar | null;
 
   // For file upload percentage purposes
   fileByteTotal: number;
@@ -69,7 +68,7 @@ class Drupal {
   uploadFileFn: UploadFileFn | null;
 
   // File to write debug info to
-  fileDebugStream: stream.Writable;
+  fileDebugStream: Writable;
 
   // Used to keep track of which files have started, are in process, and have finished
   files: Set<string>;
@@ -100,11 +99,12 @@ class Drupal {
     this.uploadFileFn = null;
   }
 
-  newArticleProcessor() {
-    return new DrupalArticleProcessor(this); // eslint-disable-line no-use-before-define
+  newArticleProcessor(): DrupalArticleProcessor {
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    return new DrupalArticleProcessor(this);
   }
 
-  setUploadFn(fn: UploadFileFn) {
+  setUploadFn(fn: UploadFileFn): void {
     this.uploadFileFn = fn;
   }
 
@@ -112,7 +112,7 @@ class Drupal {
    * Progress bar methods
    */
 
-  createArticleProgressBar(total: number) {
+  createArticleProgressBar(total: number): void {
     this.articleProgressBar =
       this.multibar &&
       this.multibar.create(total, 0, {
@@ -120,15 +120,15 @@ class Drupal {
       });
   }
 
-  async stopDB() {
+  async stopDB(): Promise<void> {
     await this.db.end();
   }
 
-  stopMultibar() {
+  stopMultibar(): void | null {
     return this.multibar && this.multibar.stop();
   }
 
-  createFileProgressBar(fileName: string) {
+  createFileProgressBar(fileName: string): SingleBar | null {
     return (
       this.multibar &&
       this.multibar.create(1, 0, {
@@ -137,7 +137,7 @@ class Drupal {
     );
   }
 
-  createFilesProgressBar() {
+  createFilesProgressBar(): void {
     this.filesProgressBar =
       this.multibar &&
       this.multibar.create(this.fileByteTotal, 0, {
@@ -145,7 +145,7 @@ class Drupal {
       });
   }
 
-  increaseFilesBarTotal(delta: number) {
+  increaseFilesBarTotal(delta: number): void | null {
     this.fileByteTotal += delta;
     return (
       this.filesProgressBar &&
@@ -153,19 +153,19 @@ class Drupal {
     );
   }
 
-  incrementFilesBar(delta: number) {
+  incrementFilesBar(delta: number): void | null {
     return this.filesProgressBar && this.filesProgressBar.increment(delta);
   }
 
-  static setTotal(bar: Obj | null, total: number) {
+  static setTotal(bar: Obj | null, total: number): void | null {
     return bar && bar.setTotal(total);
   }
 
-  static increment(bar: Obj | null, delta: number) {
+  static increment(bar: Obj | null, delta: number): void | null {
     return bar && bar.increment(delta);
   }
 
-  incrementArticleBar() {
+  incrementArticleBar(): void | null {
     return this.articleProgressBar && this.articleProgressBar.increment();
   }
 
@@ -242,8 +242,8 @@ class Drupal {
    * Maps category names to category ids from the drupal database
    */
   async genDrupalCategoriesMap(): Promise<CategoryMap> {
-    const [entries] = await this.db.query(Drupal.getDrupalCategoriesQuery());
-    const categories = {};
+    const [entries]: {name:string, tid:number}[][] = await this.db.query(Drupal.getDrupalCategoriesQuery());
+    const categories = {} as {[name: string]: number};
     entries.forEach(entry => {
       categories[entry.name] = entry.tid;
     });
@@ -303,7 +303,7 @@ class DrupalArticleProcessor {
 
   async downloadImage(
     uris: Array<string>
-  ): Promise<Object as {
+  ): Promise<{
     reqStream: request.Request;
     fileNameExt: string;
     imgType: string;
@@ -328,7 +328,7 @@ class DrupalArticleProcessor {
         const response = await requestPromise.head(uri).catch(() => false);
         if (response) {
           fullUri = uri;
-          throw new Error({ code: "success" });
+          throw new Error("success");
         } else {
           return false;
         }
@@ -340,18 +340,19 @@ class DrupalArticleProcessor {
     }
 
     const fileName = utils.getFileNameFromUri(fullUri);
-    let ext = utils.getValidExt(fileName);
+    let ext: string | false = utils.getValidExt(fileName);
     if (ext === false) {
       this.drupal.fileDebugStream.write(`Getting headers for ${fileName}\n`);
       const headers = await requestPromise.head(fullUri, options).catch(err => {
         this.drupal.fileDebugStream.write(`Failed getting headers: ${err}\n`);
         throw new Error(err);
       });
-      [, ext] = headers["content-type"].split("/");
+      const [, extension] = headers["content-type"].split("/");
+      ext = extension as string;
     }
     const fileNameExt = utils.validateImageExt(fileName, ext);
 
-    let bar = null;
+    let bar: SingleBar | null = null;
     if (!this.drupal.consolidateProgressBars) {
       bar = this.drupal.createFileProgressBar(fileNameExt);
     }
@@ -364,7 +365,7 @@ class DrupalArticleProcessor {
         if (!this.drupal.consolidateProgressBars) {
           Drupal.setTotal(
             bar,
-            parseInt(response.headers["content-length"], 10)
+            parseInt(response.headers["content-length"] || '', 10)
           );
         }
       })
@@ -408,8 +409,8 @@ class DrupalArticleProcessor {
           );
           throw new Error(err);
         });
-        const uploadResults = await this.drupal
-          .uploadFileFn(fileData, fileName, fileMimeType)
+        const uploadResults = await (this.drupal
+          .uploadFileFn as UploadFileFn)(fileData, fileName, fileMimeType)
           .catch(err => {
             this.drupal.fileDebugStream.write(
               `Retrying upload for ${logName}: ${err}\n`
@@ -418,6 +419,7 @@ class DrupalArticleProcessor {
           });
         return uploadResults;
       },
+      // eslint-disable-next-line @typescript-eslint/camelcase
       { throw_original: true }
     )
       .catch(err => {
@@ -484,7 +486,7 @@ class DrupalArticleProcessor {
     fileName: string;
     fileMimeType: string;
   }> {
-    let uris = [];
+    let uris: string[] = [];
     // public file somwhere
     if (src.match(/^public:\/\/.*/)) {
       // on server
@@ -542,7 +544,7 @@ class DrupalArticleProcessor {
     const $ = cheerio.load(htmlBody);
     await Promise.map($("img").toArray(), async el => {
       const src = $(el).attr("src");
-      if (src.match(/cleardot.gif/gi)) {
+      if (src && src.match(/cleardot.gif/gi)) {
         $(el).remove();
         return;
       }
@@ -562,4 +564,4 @@ class DrupalArticleProcessor {
   }
 }
 
-module.exports = Drupal;
+export default Drupal;
