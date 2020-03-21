@@ -1,1 +1,5 @@
 *.sql
+**/node_modules/*
+**/lib/*
+.vscode/*
+debug.txt

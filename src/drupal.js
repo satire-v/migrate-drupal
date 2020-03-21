@@ -1,23 +1,23 @@
 // @flow
-import type { CategoryMap } from './directus';
-import type { Obj } from './utils';
+import type { CategoryMap } from "./directus";
+import type { Obj } from "./utils";
 
-const { Buffer } = require('buffer');
-const fs = require('fs');
-const stream = require('stream');
+const { Buffer } = require("buffer");
+const fs = require("fs");
+const stream = require("stream");
 
-const request = require('request');
-const requestPromise = require('request-promise-native');
+const request = require("request");
+const requestPromise = require("request-promise-native");
 // Bluebird has some nice Promise.All type functions
-const Promise = require('bluebird');
+const Promise = require("bluebird");
 // To make SURE image gets uploaded
-const retry = require('bluebird-retry');
+const retry = require("bluebird-retry");
 // HTML parsing lib
-const cheerio = require('cheerio');
+const cheerio = require("cheerio");
 // Progress bar. Fun.
-const cliProgress = require('cli-progress');
+const cliProgress = require("cli-progress");
 
-const utils = require('./utils');
+const utils = require("./utils");
 
 export type DrupalArticle = {
   nid: number,
@@ -34,14 +34,14 @@ export type DrupalArticle = {
   image_id: number,
   image_uri: string,
   relative_uri: string,
-  tags_info: string,
+  tags_info: string
 };
 
 // See uploadImage fn in Directus
 export type UploadFileFn = (
   fileData: Buffer | request.Request,
   fileName: string,
-  fileMimeType: string,
+  fileMimeType: string
 ) => Promise<{ fullUri: string, imageID: number }>;
 
 /* Drupal class/object, which houses the progress of the migration,
@@ -80,18 +80,20 @@ class Drupal {
 
   constructor(db: Obj, consolidateProgressBars: boolean = true) {
     this.multibar = new cliProgress.MultiBar({
-      format: '{value}/{total} | {percentage}% | {bar} | {message}',
+      format: "{value}/{total} | {percentage}% | {bar} | {message}",
       clearOnComplete: false,
-      stream: consolidateProgressBars ? process.stderr : fs.createWriteStream('./progress.txt'),
+      stream: consolidateProgressBars
+        ? process.stderr
+        : fs.createWriteStream("./progress.txt"),
       noTTYOutput: !consolidateProgressBars,
       notTTYSchedule: consolidateProgressBars ? 0 : 5000,
       forceRedraw: !consolidateProgressBars,
-      hideCursor: true,
+      hideCursor: true
     });
     this.db = db;
     this.fileByteTotal = 0;
     this.consolidateProgressBars = consolidateProgressBars;
-    this.fileDebugStream = fs.createWriteStream('./debug.txt');
+    this.fileDebugStream = fs.createWriteStream("./debug.txt");
     this.files = new Set();
     this.fileTimeout = 15000;
   }
@@ -109,9 +111,10 @@ class Drupal {
    */
 
   createArticleProgressBar(total: number) {
-    this.articleProgressBar = this.multibar
-      && this.multibar.create(total, 0, {
-        message: 'Articles',
+    this.articleProgressBar =
+      this.multibar &&
+      this.multibar.create(total, 0, {
+        message: "Articles"
       });
   }
 
@@ -125,23 +128,27 @@ class Drupal {
 
   createFileProgressBar(fileName: string) {
     return (
-      this.multibar
-      && this.multibar.create(1, 0, {
-        message: `File: ${fileName}`,
+      this.multibar &&
+      this.multibar.create(1, 0, {
+        message: `File: ${fileName}`
       })
     );
   }
 
   createFilesProgressBar() {
-    this.filesProgressBar = this.multibar
-      && this.multibar.create(this.fileByteTotal, 0, {
-        message: 'Files',
+    this.filesProgressBar =
+      this.multibar &&
+      this.multibar.create(this.fileByteTotal, 0, {
+        message: "Files"
       });
   }
 
   increaseFilesBarTotal(delta: number) {
     this.fileByteTotal += delta;
-    return this.filesProgressBar && this.filesProgressBar.setTotal(this.fileByteTotal);
+    return (
+      this.filesProgressBar &&
+      this.filesProgressBar.setTotal(this.fileByteTotal)
+    );
   }
 
   incrementFilesBar(delta: number) {
@@ -228,10 +235,14 @@ class Drupal {
     return articles;
   }
 
+  /**
+   * @method @async
+   * Maps category names to category ids from the drupal database
+   */
   async genDrupalCategoriesMap(): Promise<CategoryMap> {
     const [entries] = await this.db.query(Drupal.getDrupalCategoriesQuery());
     const categories = {};
-    entries.forEach((entry) => {
+    entries.forEach(entry => {
       categories[entry.name] = entry.tid;
     });
     return categories;
@@ -242,25 +253,25 @@ class Drupal {
    */
 
   static parseManagedImageInfo(
-    localUri: string,
+    localUri: string
   ): { fullUris: Array<string>, fileNameExisting: string } {
     return {
       fullUris: [
         localUri.replace(
-          'public://',
-          'http://satirev.org/sites/default/files/styles/original_cropped/public/',
+          "public://",
+          "http://satirev.org/sites/default/files/styles/original_cropped/public/"
         ),
-        localUri.replace('public://', 'http://satirev.org/sites/default/files/'),
+        localUri.replace("public://", "http://satirev.org/sites/default/files/")
       ],
-      fileNameExisting: utils.getFileNameFromUri(localUri),
+      fileNameExisting: utils.getFileNameFromUri(localUri)
     };
   }
 
   findFID(obj: Obj): ?number {
-    if (obj === null || typeof obj !== 'object') return null;
+    if (obj === null || typeof obj !== "object") return null;
     let res = null;
-    Object.keys(obj).forEach((key) => {
-      if (key === 'fid') res = obj[key];
+    Object.keys(obj).forEach(key => {
+      if (key === "fid") res = obj[key];
       else res = res || this.findFID(obj[key]);
     });
     return res;
@@ -286,29 +297,33 @@ class DrupalArticleProcessor {
    */
 
   async downloadImage(
-    uris: Array<string>,
-  ): Promise<{ reqStream: request.Request, fileNameExt: string, imgType: string }> {
+    uris: Array<string>
+  ): Promise<{
+    reqStream: request.Request,
+    fileNameExt: string,
+    imgType: string
+  }> {
     const options = {
       encoding: null,
       headers: {
-        'user-agent': 'node.js',
+        "user-agent": "node.js"
       },
-      timeout: this.drupal.fileTimeout,
+      timeout: this.drupal.fileTimeout
     };
 
     if (uris.length === 0) {
-      throw new Error('No uris given for image\n');
+      throw new Error("No uris given for image\n");
     }
 
     let fullUri = null;
     if (uris.length === 1) {
       [fullUri] = uris;
     } else if (uris.length > 1) {
-      await Promise.mapSeries(uris, async (uri) => {
+      await Promise.mapSeries(uris, async uri => {
         const response = await requestPromise.head(uri).catch(() => false);
         if (response) {
           fullUri = uri;
-          throw new Error({ code: 'success' });
+          throw new Error({ code: "success" });
         } else {
           return false;
         }
@@ -316,18 +331,18 @@ class DrupalArticleProcessor {
     }
 
     if (fullUri == null) {
-      throw new Error('No uri gotten for image\n');
+      throw new Error("No uri gotten for image\n");
     }
 
     const fileName = utils.getFileNameFromUri(fullUri);
     let ext = utils.getValidExt(fileName);
     if (ext === false) {
       this.drupal.fileDebugStream.write(`Getting headers for ${fileName}\n`);
-      const headers = await requestPromise.head(fullUri, options).catch((err) => {
+      const headers = await requestPromise.head(fullUri, options).catch(err => {
         this.drupal.fileDebugStream.write(`Failed getting headers: ${err}\n`);
         throw new Error(err);
       });
-      [, ext] = headers['content-type'].split('/');
+      [, ext] = headers["content-type"].split("/");
     }
     const fileNameExt = utils.validateImageExt(fileName, ext);
 
@@ -340,28 +355,33 @@ class DrupalArticleProcessor {
 
     const reqStream = request
       .get(fullUri, options)
-      .on('response', (response) => {
+      .on("response", response => {
         if (!this.drupal.consolidateProgressBars) {
-          Drupal.setTotal(bar, parseInt(response.headers['content-length'], 10));
+          Drupal.setTotal(
+            bar,
+            parseInt(response.headers["content-length"], 10)
+          );
         }
       })
-      .on('data', (chunk) => {
+      .on("data", chunk => {
         if (!this.drupal.consolidateProgressBars) {
           Drupal.increment(bar, chunk.length);
         }
       })
-      .on('error', () => {
+      .on("error", () => {
         this.drupal.fileDebugStream.write(`Error downloading ${fileNameExt}\n`);
       })
-      .on('close', () => {
-        this.drupal.fileDebugStream.write(`Download ended for ${fileNameExt}\n`);
+      .on("close", () => {
+        this.drupal.fileDebugStream.write(
+          `Download ended for ${fileNameExt}\n`
+        );
       });
     return { reqStream, fileNameExt, imgType: `image/${ext}` };
   }
 
   async drupalToDirectusImage(
     src: string,
-    relativeUri: string,
+    relativeUri: string
   ): Promise<{ fullUri: string, imageID: number }> {
     if (this.drupal.consolidateProgressBars) {
       this.drupal.increaseFilesBarTotal(1);
@@ -376,26 +396,30 @@ class DrupalArticleProcessor {
       async () => {
         const { fileData, fileName, fileMimeType } = await this.genDataFromSrc(
           src,
-          relativeUri,
-        ).catch((err) => {
-          this.drupal.fileDebugStream.write(`Retrying download for ${logName}: ${err}\n`);
+          relativeUri
+        ).catch(err => {
+          this.drupal.fileDebugStream.write(
+            `Retrying download for ${logName}: ${err}\n`
+          );
           throw new Error(err);
         });
-        const uploadResults = await await this.drupal
+        const uploadResults = await this.drupal
           .uploadFileFn(fileData, fileName, fileMimeType)
-          .catch((err) => {
-            this.drupal.fileDebugStream.write(`Retrying upload for ${logName}: ${err}\n`);
+          .catch(err => {
+            this.drupal.fileDebugStream.write(
+              `Retrying upload for ${logName}: ${err}\n`
+            );
             throw new Error(err);
           });
         return uploadResults;
       },
-      { throw_original: true },
+      { throw_original: true }
     )
-      .catch((err) => {
+      .catch(err => {
         this.drupal.fileDebugStream.write(`Couldn't transfer file: ${err}\n`);
         throw new Error(err);
       })
-      .then((response) => {
+      .then(response => {
         // Remove from files left to finish downloading
         this.drupal.files.delete(logName);
         // Increment progress bar
@@ -406,7 +430,9 @@ class DrupalArticleProcessor {
       })
       .finally(() => {
         if (this.drupal.files.size < 5) {
-          this.drupal.fileDebugStream.write(`LEFT: [${[...this.drupal.files].toString()}]\n`);
+          this.drupal.fileDebugStream.write(
+            `LEFT: [${[...this.drupal.files].toString()}]\n`
+          );
         }
       });
 
@@ -419,31 +445,40 @@ class DrupalArticleProcessor {
 
   async genManagedFileToHTMLTag(fileObj: Obj): Promise<string> {
     const fid = this.drupal.findFID(fileObj);
-    const [nodes] = await this.drupal.db.query('SELECT uri FROM file_managed WHERE fid = ?', [fid]);
+    const [
+      nodes
+    ] = await this.drupal.db.query(
+      "SELECT uri FROM file_managed WHERE fid = ?",
+      [fid]
+    );
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
   }
 
   parseBase64ImgSrc(
     src: string,
-    relativeUri: string,
+    relativeUri: string
   ): { fileData: Buffer, fileName: string, fileMimeType: string } {
     // base 64 image
-    const block = src.split(';');
+    const block = src.split(";");
     let [fileMimeType, base64src] = block;
-    [, fileMimeType] = fileMimeType.split(':');
-    [, base64src] = base64src.split(',');
+    [, fileMimeType] = fileMimeType.split(":");
+    [, base64src] = base64src.split(",");
     const fileName = `${utils
       .sanitizeUri(utils.getFileNameFromUri(relativeUri))
-      .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split('/')[1]}`;
+      .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split("/")[1]}`;
     this.i += 1;
-    const buf = Buffer.from(base64src, 'base64');
+    const buf = Buffer.from(base64src, "base64");
     this.drupal.fileDebugStream.write(`Have base64 ${fileName}\n`);
     return { fileData: buf, fileName, fileMimeType };
   }
 
   async parseUriImgSrc(
-    src: string,
-  ): Promise<{ fileData: request.Request, fileName: string, fileMimeType: string }> {
+    src: string
+  ): Promise<{
+    fileData: request.Request,
+    fileName: string,
+    fileMimeType: string
+  }> {
     let uris = [];
     // public file somwhere
     if (src.match(/^public:\/\/.*/)) {
@@ -454,20 +489,24 @@ class DrupalArticleProcessor {
       // somewhere else
       uris.push(src);
     }
-    const res = await this.downloadImage(uris).catch((err) => {
+    const res = await this.downloadImage(uris).catch(err => {
       throw new Error(`Error in download function: ${err}`);
     });
     return {
       fileData: res.reqStream,
       fileName: res.fileNameExt,
-      fileMimeType: res.imgType,
+      fileMimeType: res.imgType
     };
   }
 
   async genDataFromSrc(
     src: string,
-    relativeUri: string,
-  ): Promise<{ fileData: Buffer | request.Request, fileName: string, fileMimeType: string }> {
+    relativeUri: string
+  ): Promise<{
+    fileData: Buffer | request.Request,
+    fileName: string,
+    fileMimeType: string
+  }> {
     if (Drupal.isBase64(src)) {
       return this.parseBase64ImgSrc(src, relativeUri);
     }
@@ -482,7 +521,7 @@ class DrupalArticleProcessor {
     const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
     let newBody = htmlBody;
     if (managedFiles != null) {
-      await Promise.each(managedFiles, async (fileObjStr) => {
+      await Promise.each(managedFiles, async fileObjStr => {
         const fileObj = JSON.parse(fileObjStr);
         const repl = await this.genManagedFileToHTMLTag(fileObj);
         newBody = newBody.replace(fileObjStr, repl);
@@ -491,10 +530,13 @@ class DrupalArticleProcessor {
     return newBody;
   }
 
-  async genProcessHTMLImageTags(htmlBody: string, relativeUri: string): Promise<string> {
+  async genProcessHTMLImageTags(
+    htmlBody: string,
+    relativeUri: string
+  ): Promise<string> {
     const $ = cheerio.load(htmlBody);
-    await Promise.map($('img').toArray(), async (el) => {
-      const src = $(el).attr('src');
+    await Promise.map($("img").toArray(), async el => {
+      const src = $(el).attr("src");
       if (src.match(/cleardot.gif/gi)) {
         $(el).remove();
         return;
@@ -503,7 +545,7 @@ class DrupalArticleProcessor {
       if (fullUri == null) {
         return;
       }
-      $(el).attr('src', fullUri);
+      $(el).attr("src", fullUri);
     });
     return $.html();
   }
