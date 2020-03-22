@@ -23,7 +23,7 @@ const { argv } = yargs
     alias: "n",
     description: "Number of articles to write to import",
     type: "number",
-    default: null,
+    default: 0,
   })
   .help()
   .alias("help", "h")

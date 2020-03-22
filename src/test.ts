@@ -1,6 +1,6 @@
 import { SDK } from "@directus/sdk-js";
 
-const test = async () => {
+const test = async (): Promise<any> => {
   const options = {
     url: "http://api.satirev.org/",
     project: "satire-v",

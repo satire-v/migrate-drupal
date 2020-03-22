@@ -15,7 +15,6 @@ module.exports = {
     SharedArrayBuffer: "readonly",
     module: true,
     global: true,
-    require: true,
   },
   parserOptions: { ecmaVersion: "2019", sourceType: "module" },
   plugins: ["@typescript-eslint", "import", "prettier"],

@@ -1,16 +1,16 @@
-import {Writable} from "stream";
+import type { Writable } from "stream";
 import fs from "fs";
 import { Buffer } from "buffer";
 
 import requestPromise from "request-promise-native";
-import request from "request";
-import cliProgress, {MultiBar, SingleBar} from "cli-progress";
+import request, { Request } from "request";
+import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 import cheerio from "cheerio";
 import retry from "bluebird-retry";
-import Promise from "bluebird";
+import Bluebird from "bluebird";
 
 import utils, { Obj } from "./utils";
-import { CategoryMap } from "./directus";
+import type { CategoryMap } from "./directus";
 
 // Bluebird has some nice Promise.All type functions
 // To make SURE image gets uploaded
@@ -37,15 +37,17 @@ export interface DrupalArticle {
 
 // See uploadImage fn in Directus
 export type UploadFileFn = (
-  fileData: Buffer | request.Request,
+  fileData: Buffer | Request,
   fileName: string,
   fileMimeType: string
-) => Promise<{ fullUri: string; imageID: number }>;
+) => Bluebird<UploadFileFnReturnType>;
+
+export type UploadFileFnReturnType = { fullUri: string; imageID: number };
 
 /* Drupal class/object, which houses the progress of the migration,
 as well as logging info. Makes it easier to use universal objects
 without passing them between functions */
-class Drupal {
+export class Drupal {
   // If you want a progress bar for each article
   multibar: MultiBar | null;
 
@@ -120,7 +122,7 @@ class Drupal {
       });
   }
 
-  async stopDB(): Promise<void> {
+  async stopDB(): Bluebird<void> {
     await this.db.end();
   }
 
@@ -231,7 +233,7 @@ class Drupal {
    * Database get methods
    */
 
-  async genAllArticles(): Promise<DrupalArticle[]> {
+  async genAllArticles(): Bluebird<DrupalArticle[]> {
     const [nodes] = await this.db.query(Drupal.getDrupalArticlesQuery());
     const articles = JSON.parse(JSON.stringify(nodes));
     return articles;
@@ -241,9 +243,11 @@ class Drupal {
    * @method @async
    * Maps category names to category ids from the drupal database
    */
-  async genDrupalCategoriesMap(): Promise<CategoryMap> {
-    const [entries]: {name:string, tid:number}[][] = await this.db.query(Drupal.getDrupalCategoriesQuery());
-    const categories = {} as {[name: string]: number};
+  async genDrupalCategoriesMap(): Bluebird<CategoryMap> {
+    const [entries]: { name: string; tid: number }[][] = await this.db.query(
+      Drupal.getDrupalCategoriesQuery()
+    );
+    const categories = {} as { [name: string]: number };
     entries.forEach(entry => {
       categories[entry.name] = entry.tid;
     });
@@ -287,7 +291,7 @@ class Drupal {
   }
 }
 
-class DrupalArticleProcessor {
+export class DrupalArticleProcessor {
   drupal: Drupal;
 
   i: number;
@@ -303,7 +307,7 @@ class DrupalArticleProcessor {
 
   async downloadImage(
     uris: Array<string>
-  ): Promise<{
+  ): Bluebird<{
     reqStream: request.Request;
     fileNameExt: string;
     imgType: string;
@@ -324,7 +328,7 @@ class DrupalArticleProcessor {
     if (uris.length === 1) {
       [fullUri] = uris;
     } else if (uris.length > 1) {
-      await Promise.mapSeries(uris, async uri => {
+      await Bluebird.mapSeries(uris, async uri => {
         const response = await requestPromise.head(uri).catch(() => false);
         if (response) {
           fullUri = uri;
@@ -365,7 +369,7 @@ class DrupalArticleProcessor {
         if (!this.drupal.consolidateProgressBars) {
           Drupal.setTotal(
             bar,
-            parseInt(response.headers["content-length"] || '', 10)
+            parseInt(response.headers["content-length"] || "", 10)
           );
         }
       })
@@ -388,7 +392,7 @@ class DrupalArticleProcessor {
   async drupalToDirectusImage(
     src: string,
     relativeUri: string
-  ): Promise<{ fullUri: string; imageID: number }> {
+  ): Bluebird<{ fullUri: string; imageID: number }> {
     if (this.drupal.consolidateProgressBars) {
       this.drupal.increaseFilesBarTotal(1);
     }
@@ -398,7 +402,9 @@ class DrupalArticleProcessor {
     const logName = utils.getFileNameFromUri(src).slice(0, 25);
 
     this.drupal.files.add(logName);
-    const res = await retry(
+    let res: UploadFileFnReturnType | Error = await retry<
+      UploadFileFnReturnType
+    >(
       async () => {
         const { fileData, fileName, fileMimeType } = await this.genDataFromSrc(
           src,
@@ -409,23 +415,28 @@ class DrupalArticleProcessor {
           );
           throw new Error(err);
         });
-        const uploadResults = await (this.drupal
-          .uploadFileFn as UploadFileFn)(fileData, fileName, fileMimeType)
-          .catch(err => {
-            this.drupal.fileDebugStream.write(
-              `Retrying upload for ${logName}: ${err}\n`
-            );
-            throw new Error(err);
-          });
+        const uploadResults: UploadFileFnReturnType = await (this.drupal
+          .uploadFileFn as UploadFileFn)(
+          fileData,
+          fileName,
+          fileMimeType
+        ).catch(err => {
+          this.drupal.fileDebugStream.write(
+            `Retrying upload for ${logName}: ${err}\n`
+          );
+          throw new Error(err);
+        });
         return uploadResults;
       },
       // eslint-disable-next-line @typescript-eslint/camelcase
       { throw_original: true }
     )
-      .catch(err => {
-        this.drupal.fileDebugStream.write(`Couldn't transfer file: ${err}\n`);
-        throw new Error(err);
-      })
+      .catch(
+        (err): Error => {
+          this.drupal.fileDebugStream.write(`Couldn't transfer file: ${err}\n`);
+          throw new Error(err);
+        }
+      )
       .then(response => {
         // Remove from files left to finish downloading
         this.drupal.files.delete(logName);
@@ -442,7 +453,7 @@ class DrupalArticleProcessor {
           );
         }
       });
-
+    res = res as UploadFileFnReturnType;
     return { fullUri: res.fullUri, imageID: res.imageID };
   }
 
@@ -450,7 +461,7 @@ class DrupalArticleProcessor {
    * File/image processing functions
    */
 
-  async genManagedFileToHTMLTag(fileObj: Obj): Promise<string> {
+  async genManagedFileToHTMLTag(fileObj: Obj): Bluebird<string> {
     const fid = this.drupal.findFID(fileObj);
     const [
       nodes,
@@ -481,8 +492,8 @@ class DrupalArticleProcessor {
 
   async parseUriImgSrc(
     src: string
-  ): Promise<{
-    fileData: request.Request;
+  ): Bluebird<{
+    fileData: Request;
     fileName: string;
     fileMimeType: string;
   }> {
@@ -509,7 +520,7 @@ class DrupalArticleProcessor {
   async genDataFromSrc(
     src: string,
     relativeUri: string
-  ): Promise<{
+  ): Bluebird<{
     fileData: Buffer | request.Request;
     fileName: string;
     fileMimeType: string;
@@ -524,11 +535,11 @@ class DrupalArticleProcessor {
    * Article body processing methods
    */
 
-  async genProcessManagedToPublicFiles(htmlBody: string): Promise<string> {
+  async genProcessManagedToPublicFiles(htmlBody: string): Bluebird<string> {
     const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
     let newBody = htmlBody;
     if (managedFiles != null) {
-      await Promise.each(managedFiles, async fileObjStr => {
+      await Bluebird.each(managedFiles, async fileObjStr => {
         const fileObj = JSON.parse(fileObjStr);
         const repl = await this.genManagedFileToHTMLTag(fileObj);
         newBody = newBody.replace(fileObjStr, repl);
@@ -540,11 +551,11 @@ class DrupalArticleProcessor {
   async genProcessHTMLImageTags(
     htmlBody: string,
     relativeUri: string
-  ): Promise<string> {
+  ): Bluebird<string> {
     const $ = cheerio.load(htmlBody);
-    await Promise.map($("img").toArray(), async el => {
-      const src = $(el).attr("src");
-      if (src && src.match(/cleardot.gif/gi)) {
+    await Bluebird.map($("img").toArray(), async el => {
+      const src = $(el).attr("src") as string;
+      if (src.match(/cleardot.gif/gi)) {
         $(el).remove();
         return;
       }
@@ -557,7 +568,9 @@ class DrupalArticleProcessor {
     return $.html();
   }
 
-  async genProcessHTMLInlineFileTags(postData: DrupalArticle): Promise<string> {
+  async genProcessHTMLInlineFileTags(
+    postData: DrupalArticle
+  ): Bluebird<string> {
     const res1 = await this.genProcessManagedToPublicFiles(postData.body);
     const res2 = this.genProcessHTMLImageTags(res1, postData.relative_uri);
     return res2;
