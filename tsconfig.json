@@ -1,17 +1,21 @@
 {
   "compilerOptions": {
-    "strict": true,
-    "noEmit": true,
-    "isolatedModules": true,
+    "target": "ES5",
+    "module": "commonjs",
     "esModuleInterop": true,
     "noUnusedLocals": true,
-    "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
+    "noUnusedParameters": true,
+    "pretty": true,
+    "noImplicitAny": false,
     "strictNullChecks": true,
-    "baseUrl": "./",
-    "allowJs": false,
+    "sourceMap": true,
     "downlevelIteration": true,
-    "typeRoots": ["./types", "./node_modules/@types"]
+    "listEmittedFiles": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "outDir": "lib"
   },
-  "exclude": ["node_modules", "lib"]
+  "include": ["src/**/*"],
+  "exclude": ["*/node_modules/**/*"]
 }

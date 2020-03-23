@@ -2,7 +2,7 @@
 import slug from "slug";
 // slugifying library. same as Directus, I believe
 // yes, i'm using both
-import requestPromise from "request-promise-native";
+import requestPromise from "request-promise";
 import request, { Options } from "request";
 import mysql2 from "mysql2";
 import Bluebird from "bluebird";

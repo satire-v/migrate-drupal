@@ -1,7 +1,7 @@
 import fs from "fs";
 
 import yargs from "yargs";
-import Promise from "bluebird";
+import Bluebird from "bluebird";
 
 import Drupal, { DrupalArticle } from "./drupal";
 import Directus from "./directus";
@@ -32,10 +32,10 @@ const { argv } = yargs
     "Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)"
   );
 
-const getDrupal = (drupal: Drupal): Promise<Array<DrupalArticle>> =>
+const getDrupal = (drupal: Drupal): Bluebird<Array<DrupalArticle>> =>
   drupal.genAllArticles();
 
-async function main() {
+async function main(): Bluebird<void> {
   const db = await database.newLocalDB(argv.db, argv.password);
 
   const drupal = new Drupal(db, true);
@@ -52,7 +52,7 @@ async function main() {
   const articlesToGet = argv.articleCount
     ? articles.slice(0, argv.articleCount)
     : articles;
-  const articlesProcessed = await Promise.map(
+  const articlesProcessed = await Bluebird.map(
     articlesToGet,
     article => directus.createArticleImportQuery(article, categoryMap),
     { concurrency: 0 }

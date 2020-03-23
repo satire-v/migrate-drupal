@@ -42,7 +42,7 @@ module.exports = {
     ],
     "@typescript-eslint/no-empty-function": "off",
     "import/no-named-as-default-member": "off",
-    "import/no-unresolved": ["error", { commonjs: true }],
+    "import/no-unresolved": "off",
     "import/extensions": "off",
     "import/no-named-as-default": "off",
     "max-classes-per-file": 0,

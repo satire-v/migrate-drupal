@@ -1,5 +1,4 @@
-import mysql2, {Connection} from 'mysql2/promise';
-
+import mysql2, { Connection } from "mysql2/promise";
 
 /* This is for if you want to connect to S3 directly,
    but it's probably better to do so through Directus */
@@ -15,11 +14,15 @@ import mysql2, {Connection} from 'mysql2/promise';
 // }
 
 // Just a utility function to setup a DB connection to localhost (gotta have MySQL installed)
-export const newLocalDB = (dbName: string, password: string): Promise<Connection> => mysql2.createConnection({
-  host: 'localhost',
-  user: 'root',
-  database: dbName,
-  password,
-});
+export const newLocalDB = (
+  dbName: string,
+  password: string
+): Promise<Connection> =>
+  mysql2.createConnection({
+    host: "localhost",
+    user: "root",
+    database: dbName,
+    password,
+  });
 
 export default { newLocalDB };

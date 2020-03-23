@@ -2,7 +2,7 @@ import type { Writable } from "stream";
 import fs from "fs";
 import { Buffer } from "buffer";
 
-import requestPromise from "request-promise-native";
+import requestPromise from "request-promise";
 import request, { Request } from "request";
 import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 import cheerio from "cheerio";
@@ -324,7 +324,7 @@ export class DrupalArticleProcessor {
       throw new Error("No uris given for image\n");
     }
 
-    let fullUri = null;
+    let fullUri = null as string | null;
     if (uris.length === 1) {
       [fullUri] = uris;
     } else if (uris.length > 1) {
@@ -343,7 +343,7 @@ export class DrupalArticleProcessor {
       throw new Error("No uri gotten for image\n");
     }
 
-    const fileName = utils.getFileNameFromUri(fullUri);
+    const fileName: string = utils.getFileNameFromUri(fullUri);
     let ext: string | false = utils.getValidExt(fileName);
     if (ext === false) {
       this.drupal.fileDebugStream.write(`Getting headers for ${fileName}\n`);
