@@ -3,3 +3,4 @@
 **/lib/*
 .vscode/*
 debug.txt
+**/.DS_Store/*
