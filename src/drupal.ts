@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/camelcase */
 import { Writable } from "stream";
 import fs from "fs";
 import { Buffer } from "buffer";
 
-import fetch, { RequestInit } from "node-fetch";
+import needle, { NeedleOptions, ReadableStream } from "needle";
 import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 import cheerio from "cheerio";
 import retry from "bluebird-retry";
@@ -10,11 +11,6 @@ import Bluebird from "bluebird";
 
 import utils, { Obj } from "./utils";
 import { CategoryMap } from "./directus";
-
-// Bluebird has some nice Promise.All type functions
-// To make SURE image gets uploaded
-// HTML parsing lib
-// Progress bar. Fun.
 
 export interface DrupalArticle {
   nid: number;
@@ -34,47 +30,24 @@ export interface DrupalArticle {
   tags_info: string;
 }
 
-// See uploadImage fn in Directus
 export type UploadFileFn = (
-  fileData: Buffer | NodeJS.ReadableStream,
+  fileData: Buffer | ReadableStream,
   fileName: string,
   fileMimeType: string
 ) => Bluebird<UploadFileFnReturnType>;
 
 export type UploadFileFnReturnType = { fullUri: string; imageID: number };
 
-/* Drupal class/object, which houses the progress of the migration,
-as well as logging info. Makes it easier to use universal objects
-without passing them between functions */
 export class Drupal {
-  // If you want a progress bar for each article
   multibar: MultiBar | null;
-
-  // db connection (localhost)
   db: Obj;
-
-  // Just one for all files. Much easier, but not as informative if you want to know what's hanging
   consolidateProgressBars: boolean;
-
-  // Progress bar for articles
   articleProgressBar: SingleBar | null;
-
-  // Progress bar for files. Different than articles bc of inline images
   filesProgressBar: SingleBar | null;
-
-  // For file upload percentage purposes
   fileByteTotal: number;
-
-  // Passed from Directus. Otherwise you get cyclical dependencies
   uploadFileFn: UploadFileFn | null;
-
-  // File to write debug info to
   fileDebugStream: Writable;
-
-  // Used to keep track of which files have started, are in process, and have finished
   files: Set<string>;
-
-  // How long before it just retries the whole download/upload process
   fileTimeout: number;
 
   constructor(db: Obj, consolidateProgressBars = true) {
@@ -318,8 +291,9 @@ export class DrupalArticleProcessor {
     fileNameExt: string;
     imgType: string;
   }> {
-    const options: RequestInit = {
+    const options: NeedleOptions = {
       timeout: this.drupal.fileTimeout,
+      decode_response: false,
     };
     if (uris.length === 0) {
       throw new Error("No uris given for image\n");
@@ -328,7 +302,6 @@ export class DrupalArticleProcessor {
     const fullUri: string = await utils.genFirstValidUri(uris);
     const { fileNameExt, ext } = await utils.genFileNameExtfromUri(
       fullUri,
-      { ...options, method: "head" },
       this.drupal.fileDebugStream
     );
 
@@ -338,9 +311,9 @@ export class DrupalArticleProcessor {
     }
     this.drupal.fileDebugStream.write(`Trying to download ${fileNameExt}\n`);
 
-    const reqStream = await fetch(fullUri, { ...options, method: "get" }).then(
-      res => res.body
-    );
+    const reqStream: ReadableStream = await needle
+      .get(fullUri, { ...options })
+      .then(res => res.body);
 
     reqStream
       .on("response", response => {

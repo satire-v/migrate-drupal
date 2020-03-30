@@ -1,8 +1,7 @@
 import { Writable } from "stream";
 
-import fetch, {RequestInit} from 'node-fetch';
-import Bluebird from 'bluebird'
-
+import needle from "needle";
+import Bluebird from "bluebird";
 export type Obj = Record<string | number, any>;
 
 export function sanitizeUri(uri: string): string {
@@ -15,7 +14,6 @@ export const getFileNameFromUri = (uri: string): string => {
   return decodeURI(fname);
 };
 
-
 export async function genFirstValidUri(uris: string[]): Bluebird<string> {
   let fullUri: string | null = null;
   let foundIt = false;
@@ -24,12 +22,11 @@ export async function genFirstValidUri(uris: string[]): Bluebird<string> {
   } else if (uris.length > 1) {
     await Bluebird.mapSeries(uris, async uri => {
       if (foundIt) return false;
-      const response = await fetch(uri, { method: "head" }).catch(
-        () => false
-      );
+      const response = await needle("head", uri).catch(() => false);
       if (response) {
         fullUri = uri;
         foundIt = true;
+        8;
       } else {
         return false;
       }
@@ -42,7 +39,10 @@ export async function genFirstValidUri(uris: string[]): Bluebird<string> {
   return fullUri as string;
 }
 
-export async function genFileNameExtfromUri(fullUri: string,  options: RequestInit, fileDebugStream: Writable): Promise<{fileNameExt: string, ext: string}> {
+export async function genFileNameExtfromUri(
+  fullUri: string,
+  fileDebugStream: Writable
+): Promise<{ fileNameExt: string; ext: string }> {
   const fileName: string = getFileNameFromUri(fullUri);
   const fileNameSan: string = fileName.replace(/[^0-9a-zA-Z-._]/g, "");
   const parts = fileNameSan.split(".");
@@ -63,10 +63,12 @@ export async function genFileNameExtfromUri(fullUri: string,  options: RequestIn
     }
   } else {
     fileDebugStream.write(`Getting headers for ${fileName}\n`);
-    const headers = await fetch(fullUri, options).catch(err => {
-      fileDebugStream.write(`Failed getting headers: ${err}\n`);
-      throw new Error(err);
-    }).then(res => res.json());
+    const headers = await needle("head", fullUri)
+      .catch(err => {
+        fileDebugStream.write(`Failed getting headers: ${err}\n`);
+        throw new Error(err);
+      })
+      .then(res => res.body);
     const [, extension] = headers["content-type"].split("/");
     ext = extension as string;
   }
@@ -77,10 +79,8 @@ export async function genFileNameExtfromUri(fullUri: string,  options: RequestIn
     parts.pop();
     fileNameExt = `${parts.join(".").slice(0, 25)}.${ext}`;
   }
-  return {fileNameExt, ext};
+  return { fileNameExt, ext };
 }
-
-
 
 export default {
   genFirstValidUri,
