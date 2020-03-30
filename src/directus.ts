@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/camelcase */
+
 import slug from "slug";
 // slugifying library. same as Directus, I believe
 // yes, i'm using both
-import requestPromise from "request-promise";
-import request, { Options } from "request";
+import fetch, { RequestInit } from "node-fetch";
 import mysql2 from "mysql2";
 import Bluebird from "bluebird";
 
-import type { Drupal, DrupalArticle } from "./drupal";
+import { Drupal, DrupalArticle } from "./drupal";
 
 // See below function, but just typing for a map of category name to category id
 export interface CategoryMap {
@@ -29,37 +29,38 @@ class Directus {
   /* This just fetches the ID of every single image in directus,
   so we can delete them all in one go. Should be a better way to do this, but for security
   Directus doesn't allow batch delete, a reasonable precaution */
-  static async getImageIds(): Bluebird<{ data: { id: number }[] }> {
-    const options: Options & { project: string } = {
+  static async getImageIds(): Promise<{ data: { id: number }[] }> {
+    const options: RequestInit = {
       method: "get",
-      // hardcoded url
-      url: "http://api.satirev.org/satire-v/files",
-      project: "satire-v",
-      auth: {
+      headers: {
         // static auth token
-        bearer: "letmeinyoubitch",
+        Authentication: "Bearer letmeinyoubitch",
       },
-      qs: {
+      body: JSON.stringify({
         fields: "id",
-      },
+      }),
     };
-    return JSON.parse(await requestPromise.get(options));
+    // hardcoded url
+    return await fetch(
+      "http://api.satirev.org/satire-v/files",
+      options
+    ).then(res => res.json());
   }
 
   /* deletes all the images for a clean migration from drupal */
-  static async deleteImages(ids: Array<{ id: number }>): Bluebird<void> {
-    const options: Options & { project: string } = {
+  static async deleteImages(ids: Array<{ id: number }>): Promise<void> {
+    const url = `http://api.satirev.org/satire-v/files/${ids
+      .map(e => e.id)
+      .join(",")}`;
+    const options: RequestInit = {
       method: "delete",
-      url: `http://api.satirev.org/satire-v/files/${ids
-        .map(e => e.id)
-        .join(",")}`,
-      project: "satire-v",
-      auth: {
+      headers: {
         // static auth token
-        bearer: "letmeinyoubitch",
+        Authentication: "Bearer letmeinyoubitch",
       },
+      body: JSON.stringify({ project: "satire-v" }),
     };
-    return requestPromise.delete(options);
+    return await fetch(url, options).then(res => res.json());
   }
 
   /* A fairly dumb function in that it just gets the data and uploads it.
@@ -67,23 +68,23 @@ class Directus {
   async uploadImage(
     /* request.Request is essentially a readble stream with some extra features,
     and both that and buffer work just fine with the api */
-    fileData: Buffer | request.Request,
+    fileData: Buffer | ReadableStream,
     fileName: string,
     fileMimeType: string
-  ): Bluebird<{ fullUri: string; fileName: string; imageID: number }> {
-    const options: Options & { project: string } = {
+  ): Promise<{ fullUri: string; fileName: string; imageID: number }> {
+    // const image = fileData;
+    const url = "http://api.satirev.org/satire-v/files";
+
+    const options: RequestInit = {
       method: "post",
       // hardcoded url
-      url: "http://api.satirev.org/satire-v/files",
-      project: "satire-v",
-      auth: {
+      headers: {
         // static auth token
-        bearer: "letmeinyoubitch",
+        Authentication: "Bearer letmeinyoubitch",
       },
       timeout: this.drupal.fileTimeout,
-      time: true,
-      // Formdata format is the most reliable way to have the request processed correctly
-      formData: {
+      body: JSON.stringify({
+        project: "satire-v",
         filename_disk: fileName,
         filename_download: fileName,
         data: {
@@ -93,7 +94,7 @@ class Directus {
             contentType: fileMimeType,
           },
         },
-      },
+      }),
     };
 
     /* Logging, or trying to. Should probably use an actual debugging library,
@@ -102,8 +103,7 @@ class Directus {
 
     /* We await this one because we can't do anything more until we have the
     id of the uploaded file */
-    const content = await requestPromise
-      .post(options)
+    const content = await fetch(url, options)
       .catch(err => {
         /* When this catch fires, I think, there isn't "Formdata: ..." in the err message
         When that shoes up, I believe it's thrown from the download function */
@@ -113,7 +113,7 @@ class Directus {
         this.drupal.fileDebugStream.write(
           `Succeeded in uploading ${fileName}\n`
         );
-        return JSON.parse(res);
+        return res.json();
       });
 
     // Return the url for img tags
@@ -200,10 +200,14 @@ class Directus {
     // But keep old slug for backwards compatibility
     const legacySlug = mysql2.escape(article.relative_uri);
     // Download featured img from Drupal, upload to Directus. Get ID back to link to in field
-    const { imageID } = await drupalArticleProcessor.drupalToDirectusImage(
-      article.image_uri,
-      article.relative_uri
-    );
+    let imageID: number | null = null;
+    if (article.image_uri != null) {
+      const res = await drupalArticleProcessor.drupalToDirectusImage(
+        article.image_uri,
+        article.relative_uri
+      );
+      imageID = res.imageID;
+    }
     // Drupal processes all the html and image bullshit, then mysql escapes it
     const body = mysql2.escape(
       await drupalArticleProcessor.genProcessHTMLInlineFileTags(article)

@@ -1,37 +1,90 @@
+import { Writable } from "stream";
+
+import fetch, {RequestInit} from 'node-fetch';
+import Bluebird from 'bluebird'
+
 export type Obj = Record<string | number, any>;
 
 export function sanitizeUri(uri: string): string {
-  return uri.replace(/[^0-9a-zA-Z-]/g, '');
+  return uri.replace(/[^0-9a-zA-Z-]/g, "");
 }
 
 export const getFileNameFromUri = (uri: string): string => {
-  const s = uri.split('/');
+  const s = uri.split("/");
   const fname = s[s.length - 1];
   return decodeURI(fname);
 };
 
-export function getValidExt(fileName: string): false | string {
-  const parts = fileName.split('.');
-  if (parts.length === 1) {
-    return false;
+
+export async function genFirstValidUri(uris: string[]): Bluebird<string> {
+  let fullUri: string | null = null;
+  let foundIt = false;
+  if (uris.length === 1) {
+    [fullUri] = uris;
+  } else if (uris.length > 1) {
+    await Bluebird.mapSeries(uris, async uri => {
+      if (foundIt) return false;
+      const response = await fetch(uri, { method: "head" }).catch(
+        () => false
+      );
+      if (response) {
+        fullUri = uri;
+        foundIt = true;
+      } else {
+        return false;
+      }
+    }).catch(() => {});
   }
-  const ext = parts[parts.length - 1];
-  if (['png', 'jpg', 'jpeg', 'JPG'].includes(ext)) return ext;
-  return false;
+
+  if (fullUri == null) {
+    fullUri = uris[uris.length - 1];
+  }
+  return fullUri as string;
 }
 
-export function validateImageExt(fileName: string, ext: string): string {
-  const fileNameSan = fileName.replace(/[^0-9a-zA-Z-._]/g, '');
-  let fileNameExt = fileNameSan;
-  const parts = fileNameSan.split('.');
+export async function genFileNameExtfromUri(fullUri: string,  options: RequestInit, fileDebugStream: Writable): Promise<{fileNameExt: string, ext: string}> {
+  const fileName: string = getFileNameFromUri(fullUri);
+  const fileNameSan: string = fileName.replace(/[^0-9a-zA-Z-._]/g, "");
+  const parts = fileNameSan.split(".");
+  let ext: string;
+  if (parts.length < 1) {
+    ext = parts[parts.length - 1];
+    switch (ext) {
+      case "png":
+        ext = "png";
+        break;
+      case "jpg":
+      case "jpeg":
+      case "JPG":
+        ext = "jpg";
+        break;
+      default:
+        break;
+    }
+  } else {
+    fileDebugStream.write(`Getting headers for ${fileName}\n`);
+    const headers = await fetch(fullUri, options).catch(err => {
+      fileDebugStream.write(`Failed getting headers: ${err}\n`);
+      throw new Error(err);
+    }).then(res => res.json());
+    const [, extension] = headers["content-type"].split("/");
+    ext = extension as string;
+  }
+  let fileNameExt: string;
   if (parts.length === 1) {
-    fileNameExt = [parts[0].slice(0, 25), ext].join('.');
+    fileNameExt = [parts[0].slice(0, 25), ext].join(".");
   } else {
     parts.pop();
-    fileNameExt = `${parts.join('.').slice(0, 25)}.${ext}`;
+    fileNameExt = `${parts.join(".").slice(0, 25)}.${ext}`;
   }
-  return fileNameExt;
+  return {fileNameExt, ext};
 }
 
-export default { validateImageExt, getValidExt, getFileNameFromUri, sanitizeUri };
 
+
+export default {
+  genFirstValidUri,
+  genFileNameExtfromUri,
+  getFileNameFromUri,
+  sanitizeUri,
+};

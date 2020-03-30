@@ -23,7 +23,13 @@ const { argv } = yargs
     alias: "n",
     description: "Number of articles to write to import",
     type: "number",
-    default: 0,
+    default: undefined,
+  })
+  .option("concurrency", {
+    alias: "c",
+    description: "Concurrency of article processing",
+    type: "number",
+    default: 10,
   })
   .help()
   .alias("help", "h")
@@ -55,7 +61,7 @@ async function main(): Bluebird<void> {
   const articlesProcessed = await Bluebird.map(
     articlesToGet,
     article => directus.createArticleImportQuery(article, categoryMap),
-    { concurrency: 0 }
+    { concurrency: argv.concurrency }
   );
 
   fs.writeFile(

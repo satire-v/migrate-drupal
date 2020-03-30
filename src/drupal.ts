@@ -1,16 +1,15 @@
-import type { Writable } from "stream";
+import { Writable } from "stream";
 import fs from "fs";
 import { Buffer } from "buffer";
 
-import requestPromise from "request-promise";
-import request, { Request } from "request";
+import fetch, { RequestInit } from "node-fetch";
 import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 import cheerio from "cheerio";
 import retry from "bluebird-retry";
 import Bluebird from "bluebird";
 
 import utils, { Obj } from "./utils";
-import type { CategoryMap } from "./directus";
+import { CategoryMap } from "./directus";
 
 // Bluebird has some nice Promise.All type functions
 // To make SURE image gets uploaded
@@ -29,15 +28,15 @@ export interface DrupalArticle {
   category_name: string;
   teaser: string;
   year: number;
-  image_id: number;
-  image_uri: string;
+  image_id: number | null;
+  image_uri: string | null;
   relative_uri: string;
   tags_info: string;
 }
 
 // See uploadImage fn in Directus
 export type UploadFileFn = (
-  fileData: Buffer | Request,
+  fileData: Buffer | NodeJS.ReadableStream,
   fileName: string,
   fileMimeType: string
 ) => Bluebird<UploadFileFnReturnType>;
@@ -93,7 +92,7 @@ export class Drupal {
     this.db = db;
     this.fileByteTotal = 0;
     this.consolidateProgressBars = consolidateProgressBars;
-    this.fileDebugStream = fs.createWriteStream("./debug.txt");
+    this.fileDebugStream = fs.createWriteStream("./debug.txt") as Writable;
     this.files = new Set();
     this.fileTimeout = 15000;
     this.articleProgressBar = null;
@@ -235,7 +234,14 @@ export class Drupal {
 
   async genAllArticles(): Bluebird<DrupalArticle[]> {
     const [nodes] = await this.db.query(Drupal.getDrupalArticlesQuery());
-    const articles = JSON.parse(JSON.stringify(nodes));
+    const articles = JSON.parse(
+      JSON.stringify(
+        nodes.map(article => {
+          if (article.body == null) article.body = "";
+          return article;
+        })
+      )
+    );
     return articles;
   }
 
@@ -308,63 +314,35 @@ export class DrupalArticleProcessor {
   async downloadImage(
     uris: Array<string>
   ): Bluebird<{
-    reqStream: request.Request;
+    reqStream: NodeJS.ReadableStream;
     fileNameExt: string;
     imgType: string;
   }> {
-    const options = {
-      encoding: null,
-      headers: {
-        "user-agent": "node.js",
-      },
+    const options: RequestInit = {
       timeout: this.drupal.fileTimeout,
     };
-
     if (uris.length === 0) {
       throw new Error("No uris given for image\n");
     }
 
-    let fullUri = null as string | null;
-    if (uris.length === 1) {
-      [fullUri] = uris;
-    } else if (uris.length > 1) {
-      await Bluebird.mapSeries(uris, async uri => {
-        const response = await requestPromise.head(uri).catch(() => false);
-        if (response) {
-          fullUri = uri;
-          throw new Error("success");
-        } else {
-          return false;
-        }
-      }).catch(() => {});
-    }
-
-    if (fullUri == null) {
-      throw new Error("No uri gotten for image\n");
-    }
-
-    const fileName: string = utils.getFileNameFromUri(fullUri);
-    let ext: string | false = utils.getValidExt(fileName);
-    if (ext === false) {
-      this.drupal.fileDebugStream.write(`Getting headers for ${fileName}\n`);
-      const headers = await requestPromise.head(fullUri, options).catch(err => {
-        this.drupal.fileDebugStream.write(`Failed getting headers: ${err}\n`);
-        throw new Error(err);
-      });
-      const [, extension] = headers["content-type"].split("/");
-      ext = extension as string;
-    }
-    const fileNameExt = utils.validateImageExt(fileName, ext);
+    const fullUri: string = await utils.genFirstValidUri(uris);
+    const { fileNameExt, ext } = await utils.genFileNameExtfromUri(
+      fullUri,
+      { ...options, method: "head" },
+      this.drupal.fileDebugStream
+    );
 
     let bar: SingleBar | null = null;
     if (!this.drupal.consolidateProgressBars) {
       bar = this.drupal.createFileProgressBar(fileNameExt);
     }
-
     this.drupal.fileDebugStream.write(`Trying to download ${fileNameExt}\n`);
 
-    const reqStream = request
-      .get(fullUri, options)
+    const reqStream = await fetch(fullUri, { ...options, method: "get" }).then(
+      res => res.body
+    );
+
+    reqStream
       .on("response", response => {
         if (!this.drupal.consolidateProgressBars) {
           Drupal.setTotal(
@@ -493,7 +471,7 @@ export class DrupalArticleProcessor {
   async parseUriImgSrc(
     src: string
   ): Bluebird<{
-    fileData: Request;
+    fileData: NodeJS.ReadableStream;
     fileName: string;
     fileMimeType: string;
   }> {
@@ -521,7 +499,7 @@ export class DrupalArticleProcessor {
     src: string,
     relativeUri: string
   ): Bluebird<{
-    fileData: Buffer | request.Request;
+    fileData: Buffer | NodeJS.ReadableStream;
     fileName: string;
     fileMimeType: string;
   }> {
