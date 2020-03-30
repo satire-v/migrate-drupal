@@ -38,10 +38,10 @@ const { argv } = yargs
     "Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)"
   );
 
-const getDrupal = (drupal: Drupal): Bluebird<Array<DrupalArticle>> =>
+const getDrupal = (drupal: Drupal): Promise<Array<DrupalArticle>> =>
   drupal.genAllArticles();
 
-async function main(): Bluebird<void> {
+async function main(): Promise<void> {
   const db = await database.newLocalDB(argv.db, argv.password);
 
   const drupal = new Drupal(db, true);

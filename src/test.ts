@@ -9,7 +9,7 @@ const test = async (): Promise<void> => {
     token: "letmeinyoubitch",
   };
   const sdk = new SDK(options);
-  const res = await sdk.getItems("articles", { q: "reindeer" });
+  const res = await sdk.getFiles({ fields: "id" });
   console.log(res);
 };
 test();

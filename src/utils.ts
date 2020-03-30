@@ -22,21 +22,19 @@ export async function genFirstValidUri(uris: string[]): Bluebird<string> {
   } else if (uris.length > 1) {
     await Bluebird.mapSeries(uris, async uri => {
       if (foundIt) return false;
-      const response = await needle("head", uri).catch(() => false);
-      if (response) {
-        fullUri = uri;
-        foundIt = true;
-        8;
-      } else {
-        return false;
-      }
-    }).catch(() => {});
+      await needle("head", uri).then(res => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          fullUri = uri;
+          foundIt = true;
+        }
+      });
+    });
   }
 
   if (fullUri == null) {
     fullUri = uris[uris.length - 1];
   }
-  return fullUri as string;
+  return fullUri;
 }
 
 export async function genFileNameExtfromUri(
@@ -68,8 +66,17 @@ export async function genFileNameExtfromUri(
         fileDebugStream.write(`Failed getting headers: ${err}\n`);
         throw new Error(err);
       })
-      .then(res => res.body);
-    const [, extension] = headers["content-type"].split("/");
+      .then(res => {
+        if (res.statusCode !== 200) {
+          fileDebugStream.write(
+            `Failed getting headers: ${res.statusMessage}\n`
+          );
+          throw new Error(res.statusMessage);
+        } else {
+          return res.headers;
+        }
+      });
+    const [, extension] = headers["content-type"]?.split("/");
     ext = extension as string;
   }
   let fileNameExt: string;

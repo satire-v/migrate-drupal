@@ -3,7 +3,6 @@
 import slug from "slug";
 import needle, { NeedleOptions, ReadableStream } from "needle";
 import mysql2 from "mysql2";
-import Bluebird from "bluebird";
 
 import { Drupal, DrupalArticle } from "./drupal";
 
@@ -22,18 +21,16 @@ class Directus {
 
   static async getImageIds(): Promise<{ data: { id: number }[] }> {
     const options: NeedleOptions = {
-      method: "GET",
       headers: {
-        Authentication: "Bearer letmeinyoubitch",
+        Authorization: "Bearer letmeinyoubitch",
       },
+      json: false,
       parse_response: "json",
     };
     return await needle(
       "get",
       "http://api.satirev.org/satire-v/files",
-      {
-        fields: "id",
-      },
+      { fields: "id" },
       options
     ).then(res => res.body);
   }
@@ -44,11 +41,11 @@ class Directus {
       .map(e => e.id)
       .join(",")}`;
     const options: NeedleOptions = {
-      method: "delete",
       headers: {
         // static auth token
-        Authentication: "Bearer letmeinyoubitch",
+        Authorization: "Bearer letmeinyoubitch",
       },
+      auth: "auto",
       parse_response: "json",
     };
     return await needle("delete", url, options).then(res => res.body);
@@ -74,10 +71,11 @@ class Directus {
 
     const options: NeedleOptions = {
       headers: {
-        Authentication: "Bearer letmeinyoubitch",
+        Authorization: "Bearer letmeinyoubitch",
       },
       timeout: this.drupal.fileTimeout,
       multipart: true,
+      auth: "auto",
     };
 
     this.drupal.fileDebugStream.write(`Trying to upload ${fileName}\n`);
@@ -143,7 +141,7 @@ class Directus {
   async createArticleImportQuery(
     article: DrupalArticle,
     categoryMap: CategoryMap
-  ): Bluebird<string> {
+  ): Promise<string> {
     const drupalArticleProcessor = this.drupal.newArticleProcessor();
     // Drupal stores it as binary 1/0
     const pub = article.status ? "published" : "draft";
