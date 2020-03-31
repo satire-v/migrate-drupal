@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/camelcase */
-import { Writable } from "stream";
-import fs from "fs";
+import fs, { WriteStream } from "fs";
 import { Buffer } from "buffer";
 
-import needle, { NeedleOptions, ReadableStream } from "needle";
+import { Connection, RowDataPacket, FieldPacket } from "mysql2/promise";
 import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 import cheerio from "cheerio";
 import retry from "bluebird-retry";
 import Bluebird from "bluebird";
+import axios, { AxiosRequestConfig } from "axios";
 
-import utils, { Obj } from "./utils";
+import utils from "./utils";
 import { CategoryMap } from "./directus";
 
 export interface DrupalArticle {
@@ -31,7 +31,7 @@ export interface DrupalArticle {
 }
 
 export type UploadFileFn = (
-  fileData: Buffer | ReadableStream,
+  fileData: Buffer | NodeJS.ReadableStream,
   fileName: string,
   fileMimeType: string
 ) => Promise<UploadFileFnReturnType>;
@@ -40,17 +40,17 @@ export type UploadFileFnReturnType = { fullUri: string; imageID: number };
 
 export class Drupal {
   multibar: MultiBar | null;
-  db: Obj;
+  db: Connection;
   consolidateProgressBars: boolean;
   articleProgressBar: SingleBar | null;
   filesProgressBar: SingleBar | null;
   fileByteTotal: number;
   uploadFileFn: UploadFileFn | null;
-  fileDebugStream: Writable;
+  fileDebugStream: WriteStream;
   files: Set<string>;
   fileTimeout: number;
 
-  constructor(db: Obj, consolidateProgressBars = true) {
+  constructor(db: Connection, consolidateProgressBars = true) {
     this.multibar = new cliProgress.MultiBar({
       format: "{value}/{total} | {percentage}% | {bar} | {message}",
       clearOnComplete: false,
@@ -65,7 +65,7 @@ export class Drupal {
     this.db = db;
     this.fileByteTotal = 0;
     this.consolidateProgressBars = consolidateProgressBars;
-    this.fileDebugStream = fs.createWriteStream("./debug.txt") as Writable;
+    this.fileDebugStream = fs.createWriteStream("./debug.txt");
     this.files = new Set();
     this.fileTimeout = 15000;
     this.articleProgressBar = null;
@@ -131,11 +131,11 @@ export class Drupal {
     return this.filesProgressBar && this.filesProgressBar.increment(delta);
   }
 
-  static setTotal(bar: Obj | null, total: number): void | null {
+  static setTotal(bar: SingleBar | null, total: number): void | null {
     return bar && bar.setTotal(total);
   }
 
-  static increment(bar: Obj | null, delta: number): void | null {
+  static increment(bar: SingleBar | null, delta: number): void | null {
     return bar && bar.increment(delta);
   }
 
@@ -206,7 +206,10 @@ export class Drupal {
    */
 
   async genAllArticles(): Promise<DrupalArticle[]> {
-    const [nodes] = await this.db.query(Drupal.getDrupalArticlesQuery());
+    const res: [RowDataPacket[], FieldPacket[]] = await this.db.query(
+      Drupal.getDrupalArticlesQuery()
+    );
+    const nodes = res[0];
     const articles = JSON.parse(
       JSON.stringify(
         nodes.map(article => {
@@ -223,9 +226,14 @@ export class Drupal {
    * Maps category names to category ids from the drupal database
    */
   async genDrupalCategoriesMap(): Promise<CategoryMap> {
-    const [entries]: { name: string; tid: number }[][] = await this.db.query(
+    interface CategoryEntry extends RowDataPacket {
+      name: string;
+      tid: number;
+    }
+    const res: [CategoryEntry[], FieldPacket[]] = await this.db.query(
       Drupal.getDrupalCategoriesQuery()
     );
+    const entries = res[0];
     const categories = {} as { [name: string]: number };
     entries.forEach(entry => {
       categories[entry.name] = entry.tid;
@@ -255,7 +263,7 @@ export class Drupal {
     };
   }
 
-  findFID(obj: Obj): number | null {
+  findFID(obj: object): number | null {
     if (obj === null || typeof obj !== "object") return null;
     let res: null | number = null;
     Object.keys(obj).forEach(key => {
@@ -287,17 +295,18 @@ export class DrupalArticleProcessor {
   async downloadImage(
     uris: Array<string>
   ): Promise<{
-    reqStream: ReadableStream;
+    reqStream: NodeJS.ReadableStream;
     fileNameExt: string;
     imgType: string;
   }> {
-    const options: NeedleOptions = {
-      read_timeout: this.drupal.fileTimeout,
-      decode_response: false,
-    };
     if (uris.length === 0) {
       throw new Error("No uris given for image\n");
     }
+
+    const options: AxiosRequestConfig = {
+      responseType: "stream",
+      timeout: this.drupal.fileTimeout,
+    };
 
     const fullUri: string = await utils.genFirstValidUri(uris);
     const { fileNameExt, ext } = await utils.genFileNameExtfromUri(
@@ -311,7 +320,9 @@ export class DrupalArticleProcessor {
     }
     this.drupal.fileDebugStream.write(`Trying to download ${fileNameExt}\n`);
 
-    const reqStream: ReadableStream = needle.get(fullUri, { ...options });
+    const reqStream: NodeJS.ReadableStream = await axios
+      .get(fullUri, options)
+      .then(res => res.data);
 
     reqStream
       .on("response", response => {
@@ -364,6 +375,7 @@ export class DrupalArticleProcessor {
           );
           throw new Error(err);
         });
+
         const uploadResults: UploadFileFnReturnType = await (this.drupal
           .uploadFileFn as UploadFileFn)(
           fileData,
@@ -410,7 +422,7 @@ export class DrupalArticleProcessor {
    * File/image processing functions
    */
 
-  async genManagedFileToHTMLTag(fileObj: Obj): Promise<string> {
+  async genManagedFileToHTMLTag(fileObj: object): Promise<string> {
     const fid = this.drupal.findFID(fileObj);
     const [
       nodes,
@@ -442,7 +454,7 @@ export class DrupalArticleProcessor {
   async parseUriImgSrc(
     src: string
   ): Promise<{
-    fileData: ReadableStream;
+    fileData: NodeJS.ReadableStream;
     fileName: string;
     fileMimeType: string;
   }> {
@@ -470,7 +482,7 @@ export class DrupalArticleProcessor {
     src: string,
     relativeUri: string
   ): Promise<{
-    fileData: Buffer | ReadableStream;
+    fileData: Buffer | NodeJS.ReadableStream;
     fileName: string;
     fileMimeType: string;
   }> {

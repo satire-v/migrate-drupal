@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/camelcase */
 
 import slug from "slug";
-import needle, { NeedleOptions, ReadableStream } from "needle";
 import mysql2 from "mysql2";
+import FormData from "form-data";
+import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File";
+import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
+import SDK from "@directus/sdk-js";
 
 import { Drupal, DrupalArticle } from "./drupal";
 
@@ -13,42 +16,29 @@ export interface CategoryMap {
 // Directus main class
 class Directus {
   drupal: Drupal;
+  sdk: SDK;
 
   constructor(drupal: Drupal) {
     this.drupal = drupal;
+    this.sdk = new SDK({
+      mode: "cookie" as AuthModes,
+      url: "http://api.satirev.org/",
+      project: "satire-v",
+      token: "letmeinyoubitch",
+    });
     this.drupal.setUploadFn(this.uploadImage.bind(this));
   }
 
-  static async getImageIds(): Promise<{ data: { id: number }[] }> {
-    const options: NeedleOptions = {
-      headers: {
-        Authorization: "Bearer letmeinyoubitch",
-      },
-      json: false,
-      parse_response: "json",
-    };
-    return await needle(
-      "get",
-      "http://api.satirev.org/satire-v/files",
-      { fields: "id" },
-      options
-    ).then(res => res.body);
+  async getImageIds(): Promise<{ data: { id: number }[][] }> {
+    return await this.sdk.getFiles({ fields: "id" });
   }
 
   /* deletes all the images for a clean migration from drupal */
-  static async deleteImages(ids: Array<{ id: number }>): Promise<void> {
-    const url = `http://api.satirev.org/satire-v/files/${ids
-      .map(e => e.id)
-      .join(",")}`;
-    const options: NeedleOptions = {
-      headers: {
-        // static auth token
-        Authorization: "Bearer letmeinyoubitch",
-      },
-      auth: "auto",
-      parse_response: "json",
-    };
-    return await needle("delete", url, options).then(res => res.body);
+  async deleteImages(ids: Array<{ id: number }>): Promise<void> {
+    return await this.sdk.deleteItems(
+      "files",
+      ids.map(item => item.id)
+    );
   }
 
   async uploadImage(
@@ -56,43 +46,21 @@ class Directus {
     fileName: string,
     fileMimeType: string
   ): Promise<{ fullUri: string; fileName: string; imageID: number }> {
-    const url = "http://api.satirev.org/satire-v/files";
-    const body = {
-      filename_disk: fileName,
-      filename_download: fileName,
-      data: {
-        value: fileData,
-        options: {
-          filename: fileName,
-          contentType: fileMimeType,
-        },
-      },
-    };
-
-    const options: NeedleOptions = {
-      headers: {
-        Authorization: "Bearer letmeinyoubitch",
-      },
-      timeout: this.drupal.fileTimeout,
-      multipart: true,
-      auth: "auto",
-    };
+    const form = new FormData();
+    form.append("filename_download", fileName);
+    form.append("filename_disk", fileName);
+    form.append("data", fileData, fileName);
 
     this.drupal.fileDebugStream.write(`Trying to upload ${fileName}\n`);
 
-    const content = await needle("post", url, body, options)
-      .catch(err => {
-        throw new Error(`Failed uploading ${fileName}: ${err}`);
-      })
-      .then(res => {
-        this.drupal.fileDebugStream.write(
-          `Succeeded in uploading ${fileName}\n`
-        );
-        return res.body;
+    const content: IFileResponse = await this.sdk.api
+      .request("post", "/files", {}, form, false, { ...form.getHeaders() })
+      .catch(e => {
+        throw new Error(e);
       });
 
     return {
-      fullUri: content.data.data.full_url,
+      fullUri: (content.data.data as { full_url: string }).full_url,
       fileName,
       imageID: content.data.id,
     };

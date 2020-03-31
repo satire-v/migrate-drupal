@@ -1,8 +1,7 @@
 import { Writable } from "stream";
 
-import needle from "needle";
 import Bluebird from "bluebird";
-export type Obj = Record<string | number, any>;
+import axios from "axios";
 
 export function sanitizeUri(uri: string): string {
   return uri.replace(/[^0-9a-zA-Z-]/g, "");
@@ -22,8 +21,8 @@ export async function genFirstValidUri(uris: string[]): Bluebird<string> {
   } else if (uris.length > 1) {
     await Bluebird.mapSeries(uris, async uri => {
       if (foundIt) return false;
-      await needle("head", uri).then(res => {
-        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+      await axios.head(uri).then(res => {
+        if (res.status && res.status >= 200 && res.status < 300) {
           fullUri = uri;
           foundIt = true;
         }
@@ -61,17 +60,16 @@ export async function genFileNameExtfromUri(
     }
   } else {
     fileDebugStream.write(`Getting headers for ${fileName}\n`);
-    const headers = await needle("head", fullUri)
+    const headers = await axios
+      .head(fullUri)
       .catch(err => {
         fileDebugStream.write(`Failed getting headers: ${err}\n`);
         throw new Error(err);
       })
       .then(res => {
-        if (res.statusCode !== 200) {
-          fileDebugStream.write(
-            `Failed getting headers: ${res.statusMessage}\n`
-          );
-          throw new Error(res.statusMessage);
+        if (res.status !== 200) {
+          fileDebugStream.write(`Failed getting headers: ${res.statusText}\n`);
+          throw new Error(res.statusText);
         } else {
           return res.headers;
         }
@@ -81,10 +79,10 @@ export async function genFileNameExtfromUri(
   }
   let fileNameExt: string;
   if (parts.length === 1) {
-    fileNameExt = [parts[0].slice(0, 25), ext].join(".");
+    fileNameExt = [parts[0].slice(0, 40), ext].join(".");
   } else {
     parts.pop();
-    fileNameExt = `${parts.join(".").slice(0, 25)}.${ext}`;
+    fileNameExt = `${parts.join(".").slice(0, 40)}.${ext}`;
   }
   return { fileNameExt, ext };
 }
