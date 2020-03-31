@@ -15,18 +15,13 @@ export const getFileNameFromUri = (uri: string): string => {
 
 export async function genFirstValidUri(uris: string[]): Bluebird<string> {
   let fullUri: string | null = null;
-  let foundIt = false;
+  const foundIt = false;
   if (uris.length === 1) {
     [fullUri] = uris;
   } else if (uris.length > 1) {
     await Bluebird.mapSeries(uris, async uri => {
       if (foundIt) return false;
-      await axios.head(uri).then(res => {
-        if (res.status && res.status >= 200 && res.status < 300) {
-          fullUri = uri;
-          foundIt = true;
-        }
-      });
+      await axios.head(uri).catch(() => false);
     });
   }
 

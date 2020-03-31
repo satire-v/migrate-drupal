@@ -3,7 +3,11 @@
 import slug from "slug";
 import mysql2 from "mysql2";
 import FormData from "form-data";
-import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File";
+import {
+  // IFilesResponse,
+  IFileResponse,
+} from "@directus/sdk-js/dist/types/schemes/response/File";
+// import { IFile } from "@directus/sdk-js/dist/types/schemes/directus/File";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
@@ -29,14 +33,15 @@ class Directus {
     this.drupal.setUploadFn(this.uploadImage.bind(this));
   }
 
-  async getImageIds(): Promise<{ data: { id: number }[][] }> {
-    return await this.sdk.getFiles({ fields: "id" });
+  async getImageIds(): Promise<{ data: { id: number }[] }> {
+    return (await this.sdk.getFiles({ fields: "id" })) as any;
+    // Typing is wrong here
   }
 
   /* deletes all the images for a clean migration from drupal */
   async deleteImages(ids: Array<{ id: number }>): Promise<void> {
     return await this.sdk.deleteItems(
-      "files",
+      "directus_files",
       ids.map(item => item.id)
     );
   }

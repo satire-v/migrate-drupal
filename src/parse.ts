@@ -49,8 +49,8 @@ async function main(): Promise<void> {
   const categoryMap = await drupal.genDrupalCategoriesMap();
   const catQuery = Directus.createCategoriesImport(categoryMap);
   const deleteArticles = "DELETE FROM articles;\n";
-  const ids = await Directus.getImageIds();
-  if (ids.data.length !== 0) await Directus.deleteImages(ids.data);
+  const ids = await directus.getImageIds();
+  if (ids.data.length !== 0) await directus.deleteImages(ids.data);
   drupal.fileDebugStream.write("Deleted existing images\n");
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
   drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
