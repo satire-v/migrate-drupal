@@ -1,4 +1,4 @@
-import { Writable } from "stream";
+import { WriteStream } from "fs";
 
 import Bluebird from "bluebird";
 import axios from "axios";
@@ -13,27 +13,37 @@ export const getFileNameFromUri = (uri: string): string => {
   return decodeURI(fname);
 };
 
-export async function genFirstValidUri(uris: string[]): Bluebird<string> {
+export async function genFirstValidUri(
+  uris: string[],
+  fileDebugStream: WriteStream
+): Bluebird<string | null> {
   let fullUri: string | null = null;
-  const foundIt = false;
+  let foundIt = false;
   if (uris.length === 1) {
     [fullUri] = uris;
   } else if (uris.length > 1) {
     await Bluebird.mapSeries(uris, async uri => {
       if (foundIt) return false;
-      await axios.head(uri).catch(() => false);
+      await axios.head(uri).then(
+        res => {
+          foundIt = true;
+          fullUri = uri;
+          return res.headers;
+        },
+        err => {
+          fileDebugStream.write(`Test for ${uri} failed: ${err}\n`);
+          return false;
+        }
+      );
     });
   }
 
-  if (fullUri == null) {
-    fullUri = uris[uris.length - 1];
-  }
   return fullUri;
 }
 
 export async function genFileNameExtfromUri(
   fullUri: string,
-  fileDebugStream: Writable
+  fileDebugStream: WriteStream
 ): Promise<{ fileNameExt: string; ext: string }> {
   const fileName: string = getFileNameFromUri(fullUri);
   const fileNameSan: string = fileName.replace(/[^0-9a-zA-Z-._]/g, "");
@@ -55,20 +65,13 @@ export async function genFileNameExtfromUri(
     }
   } else {
     fileDebugStream.write(`Getting headers for ${fileName}\n`);
-    const headers = await axios
-      .head(fullUri)
-      .catch(err => {
-        fileDebugStream.write(`Failed getting headers: ${err}\n`);
+    const headers = await axios.head(fullUri).then(
+      res => res.headers,
+      err => {
+        fileDebugStream.write(`Headers for ${fullUri}: ${err}\n`);
         throw new Error(err);
-      })
-      .then(res => {
-        if (res.status !== 200) {
-          fileDebugStream.write(`Failed getting headers: ${res.statusText}\n`);
-          throw new Error(res.statusText);
-        } else {
-          return res.headers;
-        }
-      });
+      }
+    );
     const [, extension] = headers["content-type"]?.split("/");
     ext = extension as string;
   }

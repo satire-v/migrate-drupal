@@ -298,7 +298,7 @@ export class DrupalArticleProcessor {
     reqStream: NodeJS.ReadableStream;
     fileNameExt: string;
     imgType: string;
-  }> {
+  } | null> {
     if (uris.length === 0) {
       throw new Error("No uris given for image\n");
     }
@@ -308,7 +308,13 @@ export class DrupalArticleProcessor {
       timeout: this.drupal.fileTimeout,
     };
 
-    const fullUri: string = await utils.genFirstValidUri(uris);
+    const fullUri: string | null = await utils.genFirstValidUri(
+      uris,
+      this.drupal.fileDebugStream
+    );
+    if (!fullUri) {
+      return null;
+    }
     const { fileNameExt, ext } = await utils.genFileNameExtfromUri(
       fullUri,
       this.drupal.fileDebugStream
@@ -322,7 +328,12 @@ export class DrupalArticleProcessor {
 
     const reqStream: NodeJS.ReadableStream = await axios
       .get(fullUri, options)
-      .then(res => res.data);
+      .then(
+        res => res.data,
+        e => {
+          throw new Error(`Failed download: ${fullUri}: ${e}`);
+        }
+      );
 
     reqStream
       .on("response", response => {
@@ -339,7 +350,7 @@ export class DrupalArticleProcessor {
         }
       })
       .on("error", () => {
-        this.drupal.fileDebugStream.write(`Error downloading ${fileNameExt}\n`);
+        this.drupal.fileDebugStream.write(`Download for ${fileNameExt}\n`);
       })
       .on("close", () => {
         this.drupal.fileDebugStream.write(
@@ -352,7 +363,7 @@ export class DrupalArticleProcessor {
   async drupalToDirectusImage(
     src: string,
     relativeUri: string
-  ): Promise<{ fullUri: string; imageID: number }> {
+  ): Promise<{ fullUri: string | null; imageID: number | null }> {
     if (this.drupal.consolidateProgressBars) {
       this.drupal.increaseFilesBarTotal(1);
     }
@@ -362,19 +373,21 @@ export class DrupalArticleProcessor {
     const logName = utils.getFileNameFromUri(src).slice(0, 25);
 
     this.drupal.files.add(logName);
-    let res: UploadFileFnReturnType | Error = await retry<
-      UploadFileFnReturnType
-    >(
+    const res:
+      | UploadFileFnReturnType
+      | Error
+      | null = await retry<UploadFileFnReturnType | null>(
       async () => {
-        const { fileData, fileName, fileMimeType } = await this.genDataFromSrc(
-          src,
-          relativeUri
-        ).catch(err => {
+        const data = await this.genDataFromSrc(src, relativeUri).catch(err => {
           this.drupal.fileDebugStream.write(
             `Retrying download for ${logName}: ${err}\n`
           );
           throw new Error(err);
         });
+        if (!data) {
+          return null;
+        }
+        const { fileData, fileName, fileMimeType } = data;
 
         const uploadResults: UploadFileFnReturnType = await (this.drupal
           .uploadFileFn as UploadFileFn)(
@@ -389,7 +402,6 @@ export class DrupalArticleProcessor {
         });
         return uploadResults;
       },
-      // eslint-disable-next-line @typescript-eslint/camelcase
       { throw_original: true }
     )
       .catch(
@@ -414,7 +426,7 @@ export class DrupalArticleProcessor {
           );
         }
       });
-    res = res as UploadFileFnReturnType;
+    if (!res || res instanceof Error) return { fullUri: null, imageID: null };
     return { fullUri: res.fullUri, imageID: res.imageID };
   }
 
@@ -457,7 +469,7 @@ export class DrupalArticleProcessor {
     fileData: NodeJS.ReadableStream;
     fileName: string;
     fileMimeType: string;
-  }> {
+  } | null> {
     let uris: string[] = [];
     // public file somwhere
     if (src.match(/^public:\/\/.*/)) {
@@ -469,8 +481,11 @@ export class DrupalArticleProcessor {
       uris.push(src);
     }
     const res = await this.downloadImage(uris).catch(err => {
-      throw new Error(`Error in download function: ${err}`);
+      throw new Error(`Download function for ${uris}: ${err}`);
     });
+    if (!res) {
+      return null;
+    }
     return {
       fileData: res.reqStream,
       fileName: res.fileNameExt,
@@ -485,7 +500,7 @@ export class DrupalArticleProcessor {
     fileData: Buffer | NodeJS.ReadableStream;
     fileName: string;
     fileMimeType: string;
-  }> {
+  } | null> {
     if (Drupal.isBase64(src)) {
       return this.parseBase64ImgSrc(src, relativeUri);
     }

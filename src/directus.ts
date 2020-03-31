@@ -61,7 +61,7 @@ class Directus {
     const content: IFileResponse = await this.sdk.api
       .request("post", "/files", {}, form, false, { ...form.getHeaders() })
       .catch(e => {
-        throw new Error(e);
+        throw new Error(`Failed uploading ${fileName}: ${e}`);
       });
 
     return {
