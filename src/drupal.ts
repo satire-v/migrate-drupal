@@ -308,17 +308,23 @@ export class DrupalArticleProcessor {
       timeout: this.drupal.fileTimeout,
     };
 
-    const fullUri: string | null = await utils.genFirstValidUri(
-      uris,
-      this.drupal.fileDebugStream
-    );
+    const fullUri: string | null = await utils
+      .genFirstValidUri(uris, this.drupal.fileDebugStream)
+      .catch(err => {
+        this.drupal.fileDebugStream.write(`No valid uri for ${uris}: ${err}`);
+        throw Error(err);
+      });
     if (!fullUri) {
       return null;
     }
-    const { fileNameExt, ext } = await utils.genFileNameExtfromUri(
-      fullUri,
-      this.drupal.fileDebugStream
-    );
+    const { fileNameExt, ext } = await utils
+      .genFileNameExtfromUri(fullUri, this.drupal.fileDebugStream)
+      .catch(err => {
+        this.drupal.fileDebugStream.write(
+          `Dumbass gave an invalid url ${fullUri}: ${err}`
+        );
+        throw new Error(err);
+      });
 
     let bar: SingleBar | null = null;
     if (!this.drupal.consolidateProgressBars) {

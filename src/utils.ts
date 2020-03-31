@@ -19,24 +19,20 @@ export async function genFirstValidUri(
 ): Bluebird<string | null> {
   let fullUri: string | null = null;
   let foundIt = false;
-  if (uris.length === 1) {
-    [fullUri] = uris;
-  } else if (uris.length > 1) {
-    await Bluebird.mapSeries(uris, async uri => {
-      if (foundIt) return false;
-      await axios.head(uri).then(
-        res => {
-          foundIt = true;
-          fullUri = uri;
-          return res.headers;
-        },
-        err => {
-          fileDebugStream.write(`Test for ${uri} failed: ${err}\n`);
-          return false;
-        }
-      );
-    });
-  }
+  await Bluebird.mapSeries(uris, async uri => {
+    if (foundIt) return false;
+    await axios.head(uri).then(
+      res => {
+        foundIt = true;
+        fullUri = uri;
+        return res.headers;
+      },
+      err => {
+        fileDebugStream.write(`Test for ${uri} failed: ${err}\n`);
+        return false;
+      }
+    );
+  });
 
   return fullUri;
 }
