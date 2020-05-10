@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/camelcase */
+import { IncomingMessage } from "http";
 import fs, { WriteStream } from "fs";
 import { Buffer } from "buffer";
 
@@ -31,7 +32,7 @@ export interface DrupalArticle {
 }
 
 export type UploadFileFn = (
-  fileData: Buffer | NodeJS.ReadableStream,
+  fileData: Buffer | IncomingMessage,
   fileName: string,
   fileMimeType: string
 ) => Promise<UploadFileFnReturnType>;
@@ -295,7 +296,7 @@ export class DrupalArticleProcessor {
   async downloadImage(
     uris: Array<string>
   ): Promise<{
-    reqStream: NodeJS.ReadableStream;
+    reqStream: IncomingMessage;
     fileNameExt: string;
     imgType: string;
   } | null> {
@@ -332,14 +333,12 @@ export class DrupalArticleProcessor {
     }
     this.drupal.fileDebugStream.write(`Trying to download ${fileNameExt}\n`);
 
-    const reqStream: NodeJS.ReadableStream = await axios
-      .get(fullUri, options)
-      .then(
-        res => res.data,
-        e => {
-          throw new Error(`Failed download: ${fullUri}: ${e}`);
-        }
-      );
+    const reqStream: IncomingMessage = await axios.get(fullUri, options).then(
+      res => res.data,
+      e => {
+        throw new Error(`Failed download: ${fullUri}: ${e}`);
+      }
+    );
 
     reqStream
       .on("response", response => {
@@ -472,7 +471,7 @@ export class DrupalArticleProcessor {
   async parseUriImgSrc(
     src: string
   ): Promise<{
-    fileData: NodeJS.ReadableStream;
+    fileData: IncomingMessage;
     fileName: string;
     fileMimeType: string;
   } | null> {
@@ -503,7 +502,7 @@ export class DrupalArticleProcessor {
     src: string,
     relativeUri: string
   ): Promise<{
-    fileData: Buffer | NodeJS.ReadableStream;
+    fileData: Buffer | IncomingMessage;
     fileName: string;
     fileMimeType: string;
   } | null> {

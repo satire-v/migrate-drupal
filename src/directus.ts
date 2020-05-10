@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/camelcase */
 
+import { IncomingMessage } from "http";
+
 import slug from "slug";
+import sharp, { Sharp } from "sharp";
 import mysql2 from "mysql2";
 import FormData from "form-data";
 import Bluebird from "bluebird";
@@ -13,6 +16,8 @@ import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
 import { Drupal, DrupalArticle } from "./drupal";
+
+const MB = 1024 * 1024;
 
 export interface CategoryMap {
   [name: string]: number;
@@ -61,14 +66,36 @@ class Directus {
   }
 
   async uploadImage(
-    fileData: Buffer | ReadableStream,
+    fileData: Buffer | IncomingMessage,
     fileName: string,
     fileMimeType: string
   ): Promise<{ fullUri: string; fileName: string; imageID: number }> {
+    let file: Sharp | Buffer | IncomingMessage = fileData;
+    if (fileMimeType === "image/gif") {
+      if (fileData instanceof Buffer) {
+        file = sharp(fileData).png();
+      } else {
+        const transformer = sharp().png();
+        file = fileData.pipe(transformer);
+      }
+      this.drupal.fileDebugStream.write(
+        `Converting ${fileName} from gif to png`
+      );
+    } else if (
+      fileData instanceof IncomingMessage &&
+      fileData.headers["content-length"] &&
+      parseInt(fileData.headers["content-length"], 10) > 10 * MB
+    ) {
+      const transformer = sharp().resize(1000);
+      file = fileData.pipe(transformer);
+      this.drupal.fileDebugStream.write(
+        `Resizing ${fileName} from ${fileData.headers["content-length"]}`
+      );
+    }
     const form = new FormData();
     form.append("filename_download", fileName);
     form.append("filename_disk", fileName);
-    form.append("data", fileData, fileName);
+    form.append("data", file, fileName);
 
     this.drupal.fileDebugStream.write(`Trying to upload ${fileName}\n`);
 
