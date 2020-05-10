@@ -369,7 +369,7 @@ export class DrupalArticleProcessor {
   async drupalToDirectusImage(
     src: string,
     relativeUri: string
-  ): Promise<{ fullUri: string | null; imageID: number | null }> {
+  ): Promise<{ fullUri: string; imageID: number } | null> {
     if (this.drupal.consolidateProgressBars) {
       this.drupal.increaseFilesBarTotal(1);
     }
@@ -432,7 +432,7 @@ export class DrupalArticleProcessor {
           );
         }
       });
-    if (!res || res instanceof Error) return { fullUri: null, imageID: null };
+    if (res === null || res instanceof Error) return null;
     return { fullUri: res.fullUri, imageID: res.imageID };
   }
 
@@ -541,11 +541,11 @@ export class DrupalArticleProcessor {
         $(el).remove();
         return;
       }
-      const { fullUri } = await this.drupalToDirectusImage(src, relativeUri);
-      if (fullUri == null) {
+      const res = await this.drupalToDirectusImage(src, relativeUri);
+      if (res?.fullUri == null) {
         return;
       }
-      $(el).attr("src", fullUri);
+      $(el).attr("src", res.fullUri);
     });
     return $.html();
   }

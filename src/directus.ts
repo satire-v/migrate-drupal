@@ -3,6 +3,7 @@
 import slug from "slug";
 import mysql2 from "mysql2";
 import FormData from "form-data";
+import Bluebird from "bluebird";
 import {
   // IFilesResponse,
   IFileResponse,
@@ -34,15 +35,28 @@ class Directus {
   }
 
   async getImageIds(): Promise<{ data: { id: number }[] }> {
-    return (await this.sdk.getFiles({ fields: "id" })) as any;
+    const res = await this.sdk.getFiles({ fields: "id", limit: -1 });
+    return res as any;
     // Typing is wrong here
   }
 
+  static chunkArray<T>(array: Array<T>, size: number): Array<T[]> {
+    const result: Array<T[]> = [];
+    for (let i = 0; i < array.length; i += size) {
+      const chunk: Array<T> = array.slice(i, i + size);
+      result.push(chunk);
+    }
+    return result;
+  }
+
   /* deletes all the images for a clean migration from drupal */
-  async deleteImages(ids: Array<{ id: number }>): Promise<void> {
-    return await this.sdk.deleteItems(
-      "directus_files",
-      ids.map(item => item.id)
+  async deleteImages(ids: Array<{ id: number }>): Bluebird<void> {
+    const idArray = ids.map(item => item.id);
+    const idChunks = Directus.chunkArray(idArray, 100);
+    await Bluebird.all(
+      idChunks.map(
+        async idChunk => await this.sdk.deleteItems("directus_files", idChunk)
+      )
     );
   }
 
@@ -140,7 +154,7 @@ class Directus {
         article.image_uri,
         article.relative_uri
       );
-      imageID = res.imageID;
+      if (res) imageID = res.imageID;
     }
     const body = mysql2.escape(
       await drupalArticleProcessor.genProcessHTMLInlineFileTags(article)

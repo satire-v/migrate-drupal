@@ -17,12 +17,19 @@ import mysql2, { Connection } from "mysql2/promise";
 export const newLocalDB = (
   dbName: string,
   password: string
-): Promise<Connection> =>
-  mysql2.createConnection({
-    host: "localhost",
-    user: "root",
-    database: dbName,
-    password,
-  });
+): Promise<Connection> => {
+  try {
+    const db = mysql2.createConnection({
+      host: "localhost",
+      user: "root",
+      database: dbName,
+      password,
+    });
+    return db;
+  } catch (e) {
+    console.log("Could not connect to database");
+    throw new Error(e);
+  }
+};
 
 export default { newLocalDB };
