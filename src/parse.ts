@@ -49,6 +49,7 @@ async function main(): Promise<void> {
     format.ms(),
     format.align(),
     format.errors({ stack: true }),
+    format.splat(),
     format.printf(info => {
       info.level = info.level.toUpperCase();
       return `[${info.timestamp}] ${info.ms
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
       }),
     ],
   });
+  fs.unlinkSync("combined.log");
 
   const db = await database.newLocalDB(argv.db, argv.password);
 
@@ -83,7 +85,7 @@ async function main(): Promise<void> {
   const deleteArticles = "DELETE FROM articles;\n";
   const ids = await directus.getImageIds();
   if (ids.data.length !== 0) await directus.deleteImages(ids.data);
-  drupal.fileDebugStream.write("Deleted existing images\n");
+  drupal.logger.info("Deleted existing images");
   const articles: Array<DrupalArticle> = await getDrupal(drupal);
   drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
   drupal.createFilesProgressBar();
@@ -106,7 +108,7 @@ async function main(): Promise<void> {
       if (err) throw err;
     }
   );
-  drupal.fileDebugStream.end("DONE");
+  drupal.logger.info("DONE");
   drupal.stopMultibar();
   await drupal.stopDB();
 }

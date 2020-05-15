@@ -297,7 +297,7 @@ export class DrupalArticleProcessor {
     imgType: string;
   } | null> {
     if (uris.length === 0) {
-      throw new Error("No uris given for image\n");
+      throw new Error("No uris given for image");
     }
 
     const options: AxiosRequestConfig = {
@@ -323,9 +323,7 @@ export class DrupalArticleProcessor {
         throw new Error(err);
       });
 
-    const bar: SingleBar | null = null;
-
-    this.drupal.logger.debug(`Trying to download ${fileNameExt}\n`);
+    this.drupal.logger.debug(`Trying to download ${fileNameExt}`);
 
     const reqStream: IncomingMessage = await axios.get(fullUri, options).then(
       res => res.data,
@@ -336,10 +334,10 @@ export class DrupalArticleProcessor {
 
     reqStream
       .on("error", () => {
-        this.drupal.logger.warn(`Error on download for ${fileNameExt}\n`);
+        this.drupal.logger.warn(`Error on download for ${fileNameExt}`);
       })
       .on("close", () => {
-        this.drupal.logger.debug(`Download ended for ${fileNameExt}\n`);
+        this.drupal.logger.debug(`Download ended for ${fileNameExt}`);
       });
     return { reqStream, fileNameExt, imgType: `image/${ext}` };
   }
@@ -361,7 +359,11 @@ export class DrupalArticleProcessor {
       | null = await retry<UploadFileFnReturnType | null>(
       async () => {
         const data = await this.genDataFromSrc(src, relativeUri).catch(err => {
-          this.drupal.logger.info(`Retrying download for ${logName}: ${err}\n`);
+          this.drupal.logger.warn(
+            "Retrying download for %s: $%o",
+            logName,
+            err
+          );
           throw new Error(err);
         });
         if (!data) {
@@ -375,7 +377,7 @@ export class DrupalArticleProcessor {
           fileName,
           fileMimeType
         ).catch(err => {
-          this.drupal.logger.info(`Retrying upload for ${logName}: ${err}\n`);
+          this.drupal.logger.warn("Retrying upload for %s: %o", logName, err);
           throw new Error(err);
         });
         return uploadResults;
@@ -384,7 +386,7 @@ export class DrupalArticleProcessor {
     )
       .catch(
         (err): Error => {
-          this.drupal.logger.warn(`Couldn't transfer file: ${err}\n`);
+          this.drupal.logger.error("Couldn't transfer file: %o", err);
           throw new Error(err);
         }
       )
@@ -399,7 +401,7 @@ export class DrupalArticleProcessor {
       .finally(() => {
         if (this.drupal.files.size < 5) {
           this.drupal.logger.debug(
-            `LEFT: [${[...this.drupal.files].toString()}]\n`
+            `LEFT: [${[...this.drupal.files].toString()}]`
           );
         }
       });
@@ -436,7 +438,7 @@ export class DrupalArticleProcessor {
       .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split("/")[1]}`;
     this.i += 1;
     const buf = Buffer.from(base64src, "base64");
-    this.drupal.logger.debug(`Have base64 ${fileName}\n`);
+    this.drupal.logger.debug(`Have base64 ${fileName}`);
     return { fileData: buf, fileName, fileMimeType };
   }
 

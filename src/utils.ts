@@ -27,7 +27,7 @@ export async function genFirstValidUri(
       },
       err => {
         const logger = winston.loggers.get("logger");
-        logger.debug(`Test for ${uri} failed: ${err}\n`);
+        logger.debug(`Test for ${uri} failed: ${err}`);
         return false;
       }
     );
@@ -51,11 +51,11 @@ export async function genFileNameExtfromUri(
   }
   if (ext === null) {
     const logger = winston.loggers.get("logger");
-    logger.debug(`Getting headers for ${fileName}\n`);
+    logger.debug(`Getting headers for ${fileName}`);
     const headers = await axios.head(fullUri).then(
       res => res.headers,
       err => {
-        logger.warn(`Headers for ${fullUri}: ${err}\n`);
+        logger.warn("Error getting headers for %s: %o", fullUri, err);
         throw new Error(err);
       }
     );

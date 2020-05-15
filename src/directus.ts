@@ -79,18 +79,18 @@ class Directus {
         const transformer = sharp().png();
         file = fileData.pipe(transformer);
       }
+      this.drupal.logger.info(`Converting ${fileName} from gif to png`);
       fileMimeType = "image/png";
       fileName = fileName.replace(".gif", ".png");
-      this.drupal.logger.info(`Converting ${fileName} from gif to png\n`);
     } else if (
       fileData instanceof IncomingMessage &&
       fileData.headers["content-length"] &&
-      parseInt(fileData.headers["content-length"], 10) > 10 * MB
+      parseInt(fileData.headers["content-length"], 10) > 5 * MB
     ) {
       const transformer = sharp().resize(1000);
       file = fileData.pipe(transformer);
       this.drupal.logger.info(
-        `Resizing ${fileName} from ${fileData.headers["content-length"]}\n`
+        `Resizing ${fileName} from ${fileData.headers["content-length"]}`
       );
     }
     const form = new FormData();
@@ -98,7 +98,7 @@ class Directus {
     form.append("filename_disk", fileName);
     form.append("data", file, fileName);
 
-    this.drupal.logger.debug(`Trying to upload ${fileName}\n`);
+    this.drupal.logger.debug(`Trying to upload ${fileName}`);
 
     const content: IFileResponse = await this.sdk.api
       .request("post", "/files", {}, form, false, { ...form.getHeaders() })
