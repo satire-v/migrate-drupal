@@ -1,6 +1,8 @@
+import util from "util";
 import fs from "fs";
 
 import yargs from "yargs";
+import winston, { format } from "winston";
 import Bluebird from "bluebird";
 
 import Drupal, { DrupalArticle } from "./drupal";
@@ -42,9 +44,39 @@ const getDrupal = (drupal: Drupal): Promise<Array<DrupalArticle>> =>
   drupal.genAllArticles();
 
 async function main(): Promise<void> {
+  const defaultFormat = format.combine(
+    format.timestamp({ format: "longTime" }),
+    format.ms(),
+    format.align(),
+    format.errors({ stack: true }),
+    format.printf(info => {
+      info.level = info.level.toUpperCase();
+      return `[${info.timestamp}] ${info.ms
+        .replace(/[ms]/gi, "")
+        .padStart(6, " ")}ms ${info.level}: ${info.message} ${
+        info.durationMs ? `${info.durationMs}ms` : ""
+      }${info.stack ? `\n${util.format(info.stack)}\n` : ""} `;
+    })
+  );
+
+  winston.loggers.add("logger", {
+    level: "info",
+    format: defaultFormat,
+    transports: [
+      new winston.transports.File({
+        filename: "combined.log",
+        level: "info",
+      }),
+      new winston.transports.Console({
+        format: format.colorize({ all: true }),
+        level: "info",
+      }),
+    ],
+  });
+
   const db = await database.newLocalDB(argv.db, argv.password);
 
-  const drupal = new Drupal(db, true);
+  const drupal = new Drupal(db);
   const directus = new Directus(drupal);
   const categoryMap = await drupal.genDrupalCategoriesMap();
   const catQuery = Directus.createCategoriesImport(categoryMap);

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/camelcase */
 import { IncomingMessage } from "http";
-import fs, { WriteStream } from "fs";
 import { Buffer } from "buffer";
 
+import winston, { Logger } from "winston";
 import { Connection, RowDataPacket, FieldPacket } from "mysql2/promise";
 import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 import cheerio from "cheerio";
@@ -42,31 +42,27 @@ export type UploadFileFnReturnType = { fullUri: string; imageID: number };
 export class Drupal {
   multibar: MultiBar | null;
   db: Connection;
-  consolidateProgressBars: boolean;
   articleProgressBar: SingleBar | null;
   filesProgressBar: SingleBar | null;
   fileByteTotal: number;
   uploadFileFn: UploadFileFn | null;
-  fileDebugStream: WriteStream;
+  logger: Logger;
   files: Set<string>;
   fileTimeout: number;
 
-  constructor(db: Connection, consolidateProgressBars = true) {
+  constructor(db: Connection) {
     this.multibar = new cliProgress.MultiBar({
       format: "{value}/{total} | {percentage}% | {bar} | {message}",
       clearOnComplete: false,
-      stream: consolidateProgressBars
-        ? process.stderr
-        : fs.createWriteStream("./progress.txt"),
-      noTTYOutput: !consolidateProgressBars,
-      notTTYSchedule: consolidateProgressBars ? 0 : 5000,
-      forceRedraw: !consolidateProgressBars,
+      stream: process.stderr,
+      noTTYOutput: false,
+      notTTYSchedule: 0,
+      forceRedraw: false,
       hideCursor: true,
     });
     this.db = db;
     this.fileByteTotal = 0;
-    this.consolidateProgressBars = consolidateProgressBars;
-    this.fileDebugStream = fs.createWriteStream("./debug.txt");
+    this.logger = winston.loggers.get("logger");
     this.files = new Set();
     this.fileTimeout = 15000;
     this.articleProgressBar = null;
@@ -310,28 +306,26 @@ export class DrupalArticleProcessor {
     };
 
     const fullUri: string | null = await utils
-      .genFirstValidUri(uris, this.drupal.fileDebugStream)
+      .genFirstValidUri(uris)
       .catch(err => {
-        this.drupal.fileDebugStream.write(`No valid uri for ${uris}: ${err}`);
+        this.drupal.logger.warn(`No valid uri for ${uris}: ${err}`);
         throw Error(err);
       });
     if (!fullUri) {
       return null;
     }
     const { fileNameExt, ext } = await utils
-      .genFileNameExtfromUri(fullUri, this.drupal.fileDebugStream)
+      .genFileNameExtfromUri(fullUri)
       .catch(err => {
-        this.drupal.fileDebugStream.write(
+        this.drupal.logger.warn(
           `Dumbass gave an invalid url ${fullUri}: ${err}`
         );
         throw new Error(err);
       });
 
-    let bar: SingleBar | null = null;
-    if (!this.drupal.consolidateProgressBars) {
-      bar = this.drupal.createFileProgressBar(fileNameExt);
-    }
-    this.drupal.fileDebugStream.write(`Trying to download ${fileNameExt}\n`);
+    const bar: SingleBar | null = null;
+
+    this.drupal.logger.debug(`Trying to download ${fileNameExt}\n`);
 
     const reqStream: IncomingMessage = await axios.get(fullUri, options).then(
       res => res.data,
@@ -341,26 +335,11 @@ export class DrupalArticleProcessor {
     );
 
     reqStream
-      .on("response", response => {
-        if (!this.drupal.consolidateProgressBars) {
-          Drupal.setTotal(
-            bar,
-            parseInt(response.headers["content-length"] || "", 10)
-          );
-        }
-      })
-      .on("data", chunk => {
-        if (!this.drupal.consolidateProgressBars) {
-          Drupal.increment(bar, chunk.length);
-        }
-      })
       .on("error", () => {
-        this.drupal.fileDebugStream.write(`Download for ${fileNameExt}\n`);
+        this.drupal.logger.warn(`Error on download for ${fileNameExt}\n`);
       })
       .on("close", () => {
-        this.drupal.fileDebugStream.write(
-          `Download ended for ${fileNameExt}\n`
-        );
+        this.drupal.logger.debug(`Download ended for ${fileNameExt}\n`);
       });
     return { reqStream, fileNameExt, imgType: `image/${ext}` };
   }
@@ -369,9 +348,7 @@ export class DrupalArticleProcessor {
     src: string,
     relativeUri: string
   ): Promise<{ fullUri: string; imageID: number } | null> {
-    if (this.drupal.consolidateProgressBars) {
-      this.drupal.increaseFilesBarTotal(1);
-    }
+    this.drupal.increaseFilesBarTotal(1);
 
     // dont need more than that for logging purposes
     // and the real file name might need the MIME type fetched
@@ -384,9 +361,7 @@ export class DrupalArticleProcessor {
       | null = await retry<UploadFileFnReturnType | null>(
       async () => {
         const data = await this.genDataFromSrc(src, relativeUri).catch(err => {
-          this.drupal.fileDebugStream.write(
-            `Retrying download for ${logName}: ${err}\n`
-          );
+          this.drupal.logger.info(`Retrying download for ${logName}: ${err}\n`);
           throw new Error(err);
         });
         if (!data) {
@@ -400,9 +375,7 @@ export class DrupalArticleProcessor {
           fileName,
           fileMimeType
         ).catch(err => {
-          this.drupal.fileDebugStream.write(
-            `Retrying upload for ${logName}: ${err}\n`
-          );
+          this.drupal.logger.info(`Retrying upload for ${logName}: ${err}\n`);
           throw new Error(err);
         });
         return uploadResults;
@@ -411,7 +384,7 @@ export class DrupalArticleProcessor {
     )
       .catch(
         (err): Error => {
-          this.drupal.fileDebugStream.write(`Couldn't transfer file: ${err}\n`);
+          this.drupal.logger.warn(`Couldn't transfer file: ${err}\n`);
           throw new Error(err);
         }
       )
@@ -419,14 +392,13 @@ export class DrupalArticleProcessor {
         // Remove from files left to finish downloading
         this.drupal.files.delete(logName);
         // Increment progress bar
-        if (this.drupal.consolidateProgressBars) {
-          this.drupal.incrementFilesBar(1);
-        }
+        this.drupal.incrementFilesBar(1);
+
         return response;
       })
       .finally(() => {
         if (this.drupal.files.size < 5) {
-          this.drupal.fileDebugStream.write(
+          this.drupal.logger.debug(
             `LEFT: [${[...this.drupal.files].toString()}]\n`
           );
         }
@@ -464,7 +436,7 @@ export class DrupalArticleProcessor {
       .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split("/")[1]}`;
     this.i += 1;
     const buf = Buffer.from(base64src, "base64");
-    this.drupal.fileDebugStream.write(`Have base64 ${fileName}\n`);
+    this.drupal.logger.debug(`Have base64 ${fileName}\n`);
     return { fileData: buf, fileName, fileMimeType };
   }
 

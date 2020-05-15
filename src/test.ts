@@ -1,4 +1,7 @@
 /* eslint-disable @typescript-eslint/camelcase */
+import util from "util";
+
+import winston, { format } from "winston";
 import axios from "axios";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
@@ -14,6 +17,6 @@ const test = async (): Promise<void> => {
 
   const res = await sdk.getFiles({ fields: "id", limit: -1 });
 
-  console.log(res);
+  // console.log(res);
 };
 test();

@@ -2,6 +2,7 @@
 
 import { IncomingMessage } from "http";
 
+import winston from "winston";
 import slug from "slug";
 import sharp, { Sharp } from "sharp";
 import mysql2 from "mysql2";
@@ -78,9 +79,9 @@ class Directus {
         const transformer = sharp().png();
         file = fileData.pipe(transformer);
       }
-      this.drupal.fileDebugStream.write(
-        `Converting ${fileName} from gif to png`
-      );
+      fileMimeType = "image/png";
+      fileName = fileName.replace(".gif", ".png");
+      this.drupal.logger.info(`Converting ${fileName} from gif to png\n`);
     } else if (
       fileData instanceof IncomingMessage &&
       fileData.headers["content-length"] &&
@@ -88,8 +89,8 @@ class Directus {
     ) {
       const transformer = sharp().resize(1000);
       file = fileData.pipe(transformer);
-      this.drupal.fileDebugStream.write(
-        `Resizing ${fileName} from ${fileData.headers["content-length"]}`
+      this.drupal.logger.info(
+        `Resizing ${fileName} from ${fileData.headers["content-length"]}\n`
       );
     }
     const form = new FormData();
@@ -97,7 +98,7 @@ class Directus {
     form.append("filename_disk", fileName);
     form.append("data", file, fileName);
 
-    this.drupal.fileDebugStream.write(`Trying to upload ${fileName}\n`);
+    this.drupal.logger.debug(`Trying to upload ${fileName}\n`);
 
     const content: IFileResponse = await this.sdk.api
       .request("post", "/files", {}, form, false, { ...form.getHeaders() })

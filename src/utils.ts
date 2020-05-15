@@ -1,5 +1,4 @@
-import { WriteStream } from "fs";
-
+import winston from "winston";
 import Bluebird from "bluebird";
 import axios from "axios";
 
@@ -14,8 +13,7 @@ export const getFileNameFromUri = (uri: string): string => {
 };
 
 export async function genFirstValidUri(
-  uris: string[],
-  fileDebugStream: WriteStream
+  uris: string[]
 ): Bluebird<string | null> {
   let fullUri: string | null = null;
   let foundIt = false;
@@ -28,7 +26,8 @@ export async function genFirstValidUri(
         return res.headers;
       },
       err => {
-        fileDebugStream.write(`Test for ${uri} failed: ${err}\n`);
+        const logger = winston.loggers.get("logger");
+        logger.debug(`Test for ${uri} failed: ${err}\n`);
         return false;
       }
     );
@@ -38,46 +37,36 @@ export async function genFirstValidUri(
 }
 
 export async function genFileNameExtfromUri(
-  fullUri: string,
-  fileDebugStream: WriteStream
+  fullUri: string
 ): Promise<{ fileNameExt: string; ext: string }> {
   const fileName: string = getFileNameFromUri(fullUri);
   const fileNameSan: string = fileName.replace(/[^0-9a-zA-Z-._]/g, "");
   const parts = fileNameSan.split(".");
-  let ext: string;
-  if (parts.length < 1) {
-    ext = parts[parts.length - 1];
-    switch (ext) {
-      case "png":
-        ext = "png";
-        break;
-      case "jpg":
-      case "jpeg":
-      case "JPG":
-        ext = "jpg";
-        break;
-      default:
-        break;
-    }
-  } else {
-    fileDebugStream.write(`Getting headers for ${fileName}\n`);
+  let ext: string | null = null;
+
+  if (parts.length > 1) {
+    ext = parts.pop() as string;
+    if (/jp(e)?g/i.test(ext)) ext = "jpg";
+    if (ext !== "png") ext = null;
+  }
+  if (ext === null) {
+    const logger = winston.loggers.get("logger");
+    logger.debug(`Getting headers for ${fileName}\n`);
     const headers = await axios.head(fullUri).then(
       res => res.headers,
       err => {
-        fileDebugStream.write(`Headers for ${fullUri}: ${err}\n`);
+        logger.warn(`Headers for ${fullUri}: ${err}\n`);
         throw new Error(err);
       }
     );
     const [, extension] = headers["content-type"]?.split("/");
     ext = extension as string;
   }
-  let fileNameExt: string;
-  if (parts.length === 1) {
-    fileNameExt = [parts[0].slice(0, 40), ext].join(".");
-  } else {
-    parts.pop();
-    fileNameExt = `${parts.join(".").slice(0, 40)}.${ext}`;
-  }
+  const fileNameExt = `${parts
+    .join(".")
+    .slice(0, 40)
+    .replace(/^-|-$/g, "")}.${ext}`;
+
   return { fileNameExt, ext };
 }
 
