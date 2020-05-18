@@ -49,7 +49,6 @@ async function main(): Promise<void> {
     format.ms(),
     format.align(),
     format.errors({ stack: true }),
-    format.splat(),
     format.printf(info => {
       info.level = info.level.toUpperCase();
       return `[${info.timestamp}] ${info.ms
@@ -67,6 +66,7 @@ async function main(): Promise<void> {
       new winston.transports.File({
         filename: "combined.log",
         level: "info",
+        // handleExceptions: true,
       }),
       new winston.transports.Console({
         format: format.colorize({ all: true }),

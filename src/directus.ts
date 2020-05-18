@@ -2,7 +2,7 @@
 
 import { IncomingMessage } from "http";
 
-import winston from "winston";
+import { loggers } from "winston";
 import slug from "slug";
 import sharp, { Sharp } from "sharp";
 import mysql2 from "mysql2";
@@ -103,7 +103,9 @@ class Directus {
     const content: IFileResponse = await this.sdk.api
       .request("post", "/files", {}, form, false, { ...form.getHeaders() })
       .catch(e => {
-        throw new Error(`Failed uploading ${fileName}: ${e}`);
+        this.drupal.logger.warn(`Failed uploading ${fileName}`);
+        this.drupal.logger.warn(e);
+        throw e;
       });
 
     return {

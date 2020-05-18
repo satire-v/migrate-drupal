@@ -6,7 +6,7 @@ import axios from "axios";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
-const test = async (): Promise<void> => {
+const test = (): void => {
   const dirOptions = {
     mode: "cookie" as AuthModes,
     url: "http://api.satirev.org/",
@@ -37,19 +37,23 @@ const test = async (): Promise<void> => {
       new winston.transports.File({
         filename: "combined.log",
         level: "info",
+        // handleExceptions: true,
       }),
       new winston.transports.Console({
         format: format.colorize({ all: true }),
         level: "info",
       }),
     ],
+
+    exitOnError: false,
   });
 
-  winston.loggers
-    .get("logger")
-    .warn("testing this syntax with %s and %o", "string", new Error("help"));
+  const logger = winston.loggers.get("logger");
 
-  const res = await sdk.getFiles({ fields: "id", limit: -1 });
+  logger.info("start");
+  logger.error(new Error("error message"));
+
+  // const res = await sdk.getFiles({ fields: "id", limit: -1 });
 
   // console.log(res);
 };

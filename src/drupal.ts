@@ -308,8 +308,9 @@ export class DrupalArticleProcessor {
     const fullUri: string | null = await utils
       .genFirstValidUri(uris)
       .catch(err => {
-        this.drupal.logger.warn(`No valid uri for ${uris}: ${err}`);
-        throw Error(err);
+        this.drupal.logger.warn(`No valid uri for ${uris}`);
+        this.drupal.logger.warn(err);
+        throw err;
       });
     if (!fullUri) {
       return null;
@@ -317,10 +318,9 @@ export class DrupalArticleProcessor {
     const { fileNameExt, ext } = await utils
       .genFileNameExtfromUri(fullUri)
       .catch(err => {
-        this.drupal.logger.warn(
-          `Dumbass gave an invalid url ${fullUri}: ${err}`
-        );
-        throw new Error(err);
+        this.drupal.logger.warn(`Dumbass gave an invalid url ${fullUri}`);
+        this.drupal.logger.warn(err);
+        throw err;
       });
 
     this.drupal.logger.debug(`Trying to download ${fileNameExt}`);
@@ -328,7 +328,9 @@ export class DrupalArticleProcessor {
     const reqStream: IncomingMessage = await axios.get(fullUri, options).then(
       res => res.data,
       e => {
-        throw new Error(`Failed download: ${fullUri}: ${e}`);
+        this.drupal.logger.warn(`Failed download: ${fullUri}`);
+        this.drupal.logger.warn(e);
+        throw e;
       }
     );
 
@@ -359,12 +361,9 @@ export class DrupalArticleProcessor {
       | null = await retry<UploadFileFnReturnType | null>(
       async () => {
         const data = await this.genDataFromSrc(src, relativeUri).catch(err => {
-          this.drupal.logger.warn(
-            "Retrying download for %s: $%o",
-            logName,
-            err
-          );
-          throw new Error(err);
+          this.drupal.logger.warn(`Retrying download for ${logName}`);
+          this.drupal.logger.warn(err);
+          throw err;
         });
         if (!data) {
           return null;
@@ -377,8 +376,9 @@ export class DrupalArticleProcessor {
           fileName,
           fileMimeType
         ).catch(err => {
-          this.drupal.logger.warn("Retrying upload for %s: %o", logName, err);
-          throw new Error(err);
+          this.drupal.logger.warn(`Retrying upload for ${logName}`);
+          this.drupal.logger.warn(err);
+          throw err;
         });
         return uploadResults;
       },
@@ -386,8 +386,9 @@ export class DrupalArticleProcessor {
     )
       .catch(
         (err): Error => {
-          this.drupal.logger.error("Couldn't transfer file: %o", err);
-          throw new Error(err);
+          this.drupal.logger.error(`Coundn't transfer file ${logName}`);
+          this.drupal.logger.error(err);
+          throw err;
         }
       )
       .then(response => {
@@ -400,9 +401,7 @@ export class DrupalArticleProcessor {
       })
       .finally(() => {
         if (this.drupal.files.size < 5) {
-          this.drupal.logger.debug(
-            `LEFT: [${[...this.drupal.files].toString()}]`
-          );
+          this.drupal.logger.debug("LEFT: [%o]", [...this.drupal.files]);
         }
       });
     if (res === null || res instanceof Error) return null;
@@ -460,7 +459,9 @@ export class DrupalArticleProcessor {
       uris.push(src);
     }
     const res = await this.downloadImage(uris).catch(err => {
-      throw new Error(`Download function for ${uris}: ${err}`);
+      this.drupal.logger.warn(`Download function failed for ${uris}`);
+      this.drupal.logger.warn(err);
+      throw err;
     });
     if (!res) {
       return null;
