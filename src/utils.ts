@@ -12,6 +12,10 @@ export const getFileNameFromUri = (uri: string): string => {
   return decodeURI(fname);
 };
 
+export const isBase64 = (src: string): boolean => {
+  return !!src.match(/.*data:image.*/);
+};
+
 export async function genFirstValidUri(
   uris: string[]
 ): Bluebird<string | null> {
@@ -26,9 +30,9 @@ export async function genFirstValidUri(
         return res.headers;
       },
       err => {
-        const logger = winston.loggers.get("logger");
-        logger.debug(`Test for ${uri} failed`);
-        logger.debug(err);
+        // const logger = winston.loggers.get("logger");
+        // logger.debug(`Test for ${uri} failed`);
+        // logger.debug(err);
         return false;
       }
     );
@@ -77,4 +81,5 @@ export default {
   genFileNameExtfromUri,
   getFileNameFromUri,
   sanitizeUri,
+  isBase64,
 };

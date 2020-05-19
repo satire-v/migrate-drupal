@@ -2,7 +2,6 @@
 
 import { IncomingMessage } from "http";
 
-import { loggers } from "winston";
 import slug from "slug";
 import sharp, { Sharp } from "sharp";
 import mysql2 from "mysql2";
@@ -106,6 +105,10 @@ class Directus {
         this.drupal.logger.warn(`Failed uploading ${fileName}`);
         this.drupal.logger.warn(e);
         throw e;
+      })
+      .then(res => {
+        this.drupal.logger.debug(`Upload succeeeded for ${fileName}`);
+        return res;
       });
 
     return {
@@ -159,7 +162,10 @@ class Directus {
     article: DrupalArticle,
     categoryMap: CategoryMap
   ): Promise<string> {
-    const drupalArticleProcessor = this.drupal.newArticleProcessor();
+    const drupalArticleProcessor = this.drupal.newArticleProcessor(
+      article.title,
+      article.nid
+    );
     // Drupal stores it as binary 1/0
     const pub = article.status ? "published" : "draft";
     const created = Directus.unixToSQLDate(article.created);

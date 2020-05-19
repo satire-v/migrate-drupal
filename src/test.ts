@@ -6,7 +6,9 @@ import axios from "axios";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
-const test = (): void => {
+import database from "./database";
+
+const test = async (): Promise<void> => {
   const dirOptions = {
     mode: "cookie" as AuthModes,
     url: "http://api.satirev.org/",
@@ -37,7 +39,6 @@ const test = (): void => {
       new winston.transports.File({
         filename: "combined.log",
         level: "info",
-        // handleExceptions: true,
       }),
       new winston.transports.Console({
         format: format.colorize({ all: true }),
@@ -50,11 +51,29 @@ const test = (): void => {
 
   const logger = winston.loggers.get("logger");
 
-  logger.info("start");
-  logger.error(new Error("error message"));
+  // const res = await sdk.getFiles({ fields: "filename_download", limit: -1 });
+  // const db = await database.newLocalDB("satirevdrupal");
+  const res = await db.query(
+    `SELECT
+        n.nid,
+        urls.alias as relative_uri
+      FROM
+        node n
+        LEFT JOIN url_alias urls ON urls.source = CONCAT('node/', n.nid)
+      WHERE n.type = 'article' AND urls.source LIKE 'node%'
+      GROUP BY n.nid,
+        relative_uri`
+  );
+  const res2 = await db.query(
+    `SELECT * FROM url_alias WHERE source = 'node/716'`
+  );
+  const parsedGroup = JSON.parse(JSON.stringify(res[0])).map(e => e.nid);
+  const parsedRaw = JSON.parse(JSON.stringify(res2[0])).map(e => e.nid);
+  const findDuplicates = arr =>
+    arr.filter((item, index) => arr.indexOf(item) != index);
 
-  // const res = await sdk.getFiles({ fields: "id", limit: -1 });
-
-  // console.log(res);
+  const diff = findDuplicates(parsedGroup);
+  await db.end();
+  console.log(parsedGroup);
 };
 test();

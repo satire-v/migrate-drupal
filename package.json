@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node ./lib/test.js",
+    "debugtest": "npm run build && node --inspect-brk ./lib/test.js",
     "try": "npm run build && node ./lib/parse.js",
     "debug": "npm run build && node --inspect-brk ./lib/parse.js",
     "go": "node ./lib/parse.js"

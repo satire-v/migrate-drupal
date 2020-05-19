@@ -68,6 +68,10 @@ async function main(): Promise<void> {
         level: "info",
         // handleExceptions: true,
       }),
+      new winston.transports.File({
+        filename: "debug.log",
+        level: "debug",
+      }),
       new winston.transports.Console({
         format: format.colorize({ all: true }),
         level: "info",
@@ -75,6 +79,7 @@ async function main(): Promise<void> {
     ],
   });
   fs.unlinkSync("combined.log");
+  fs.unlinkSync("debug.log");
 
   const db = await database.newLocalDB(argv.db, argv.password);
 
@@ -108,7 +113,13 @@ async function main(): Promise<void> {
       if (err) throw err;
     }
   );
-  drupal.logger.info("DONE");
+  const sentFiles = (await directus.sdk.getFiles({
+    limit: -1,
+    fields: "filename_download",
+  })) as any;
+
+  const sentFilesSet = new Set(sentFiles.data.map(e => e.filename_download));
+
   drupal.stopMultibar();
   await drupal.stopDB();
 }

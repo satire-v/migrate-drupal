@@ -44,10 +44,11 @@ export class Drupal {
   db: Connection;
   articleProgressBar: SingleBar | null;
   filesProgressBar: SingleBar | null;
-  fileByteTotal: number;
+  filesTotal: number;
   uploadFileFn: UploadFileFn | null;
   logger: Logger;
-  files: Set<string>;
+  files: string[];
+  filesLeft: string[];
   fileTimeout: number;
 
   constructor(db: Connection) {
@@ -61,18 +62,19 @@ export class Drupal {
       hideCursor: true,
     });
     this.db = db;
-    this.fileByteTotal = 0;
+    this.filesTotal = 0;
     this.logger = winston.loggers.get("logger");
-    this.files = new Set();
+    this.files = [];
+    this.filesLeft = [];
     this.fileTimeout = 15000;
     this.articleProgressBar = null;
     this.filesProgressBar = null;
     this.uploadFileFn = null;
   }
 
-  newArticleProcessor(): DrupalArticleProcessor {
+  newArticleProcessor(title: string, nid: number): DrupalArticleProcessor {
     // eslint-disable-next-line @typescript-eslint/no-use-before-define
-    return new DrupalArticleProcessor(this);
+    return new DrupalArticleProcessor(this, title, nid);
   }
 
   setUploadFn(fn: UploadFileFn): void {
@@ -99,41 +101,23 @@ export class Drupal {
     return this.multibar && this.multibar.stop();
   }
 
-  createFileProgressBar(fileName: string): SingleBar | null {
-    return (
-      this.multibar &&
-      this.multibar.create(1, 0, {
-        message: `File: ${fileName}`,
-      })
-    );
-  }
-
   createFilesProgressBar(): void {
     this.filesProgressBar =
       this.multibar &&
-      this.multibar.create(this.fileByteTotal, 0, {
+      this.multibar.create(this.filesTotal, 0, {
         message: "Files",
       });
   }
 
-  increaseFilesBarTotal(delta: number): void | null {
-    this.fileByteTotal += delta;
+  increaseFilesBarTotal(): void | null {
+    this.filesTotal += 1;
     return (
-      this.filesProgressBar &&
-      this.filesProgressBar.setTotal(this.fileByteTotal)
+      this.filesProgressBar && this.filesProgressBar.setTotal(this.filesTotal)
     );
   }
 
   incrementFilesBar(delta: number): void | null {
     return this.filesProgressBar && this.filesProgressBar.increment(delta);
-  }
-
-  static setTotal(bar: SingleBar | null, total: number): void | null {
-    return bar && bar.setTotal(total);
-  }
-
-  static increment(bar: SingleBar | null, delta: number): void | null {
-    return bar && bar.increment(delta);
   }
 
   incrementArticleBar(): void | null {
@@ -269,19 +253,19 @@ export class Drupal {
     });
     return res;
   }
-
-  static isBase64(src: string): boolean {
-    return !!src.match(/.*data:image.*/);
-  }
 }
 
 export class DrupalArticleProcessor {
   drupal: Drupal;
+  title: string;
+  nid: number;
 
   i: number;
 
-  constructor(drupal: Drupal) {
+  constructor(drupal: Drupal, title: string, nid: number) {
     this.drupal = drupal;
+    this.title = title;
+    this.nid = nid;
     this.i = 0;
   }
 
@@ -348,13 +332,18 @@ export class DrupalArticleProcessor {
     src: string,
     relativeUri: string
   ): Promise<{ fullUri: string; imageID: number } | null> {
-    this.drupal.increaseFilesBarTotal(1);
+    this.drupal.increaseFilesBarTotal();
 
-    // dont need more than that for logging purposes
-    // and the real file name might need the MIME type fetched
-    const logName = utils.getFileNameFromUri(src).slice(0, 25);
+    // TODO: fetch file name first, then go through this process
+    // may seem counterintuitive but for logging purposes i think it's the right move
+    // esp. because there may be generic repeats (unnamed-1, etc)
+    const logName = utils.getFileNameFromUri(src);
 
-    this.drupal.files.add(logName);
+    if (this.drupal.files.includes(logName)) {
+      this.drupal.logger.warn(`Already tried to process ${logName}`);
+    }
+    this.drupal.files.push(logName);
+    this.drupal.filesLeft.push(logName);
     const res:
       | UploadFileFnReturnType
       | Error
@@ -392,20 +381,30 @@ export class DrupalArticleProcessor {
         }
       )
       .then(response => {
-        // Remove from files left to finish downloading
-        this.drupal.files.delete(logName);
-        // Increment progress bar
+        const index = this.drupal.filesLeft.indexOf(logName);
+
+        if (index > -1) {
+          this.drupal.filesLeft.splice(index, 1);
+        }
+
         this.drupal.incrementFilesBar(1);
 
         return response;
       })
       .finally(() => {
-        if (this.drupal.files.size < 5) {
-          this.drupal.logger.debug("LEFT: [%o]", [...this.drupal.files]);
+        if (this.drupal.filesLeft.length < 5) {
+          this.drupal.logger.debug(`LEFT: ${this.drupal.filesLeft}`);
         }
       });
     if (res === null || res instanceof Error) return null;
     return { fullUri: res.fullUri, imageID: res.imageID };
+  }
+
+  getInlineImageName(relativeUri: string, fileMimeType: string): string {
+    this.i += 1;
+    return `${utils
+      .sanitizeUri(utils.getFileNameFromUri(relativeUri))
+      .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split("/")[1]}`;
   }
 
   /*
@@ -432,10 +431,7 @@ export class DrupalArticleProcessor {
     let [fileMimeType, base64src] = block;
     [, fileMimeType] = fileMimeType.split(":");
     [, base64src] = base64src.split(",");
-    const fileName = `${utils
-      .sanitizeUri(utils.getFileNameFromUri(relativeUri))
-      .slice(0, 15)}-inline-image-${this.i}.${fileMimeType.split("/")[1]}`;
-    this.i += 1;
+    const fileName = this.getInlineImageName(relativeUri, fileMimeType);
     const buf = Buffer.from(base64src, "base64");
     this.drupal.logger.debug(`Have base64 ${fileName}`);
     return { fileData: buf, fileName, fileMimeType };
@@ -481,7 +477,7 @@ export class DrupalArticleProcessor {
     fileName: string;
     fileMimeType: string;
   } | null> {
-    if (Drupal.isBase64(src)) {
+    if (utils.isBase64(src)) {
       return this.parseBase64ImgSrc(src, relativeUri);
     }
     return await this.parseUriImgSrc(src);
