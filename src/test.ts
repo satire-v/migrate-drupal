@@ -52,7 +52,7 @@ const test = async (): Promise<void> => {
   const logger = winston.loggers.get("logger");
 
   // const res = await sdk.getFiles({ fields: "filename_download", limit: -1 });
-  // const db = await database.newLocalDB("satirevdrupal");
+  const db = await database.newLocalDB("satirevdrupal");
   const res = await db.query(
     `SELECT
         n.nid,

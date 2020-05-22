@@ -183,12 +183,12 @@ class Directus {
       lower: true,
     });
     // keep old slug for backwards compatibility
-    const legacySlug = mysql2.escape(article.relative_uri);
+    const legacySlug = mysql2.escape(article.relative_path);
     let imageID: number | null = null;
     if (article.image_uri != null) {
       const res = await drupalArticleProcessor.drupalToDirectusImage(
         article.image_uri,
-        article.relative_uri
+        article.relative_path
       );
       if (res) imageID = res.imageID;
     }
