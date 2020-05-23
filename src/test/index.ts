@@ -6,7 +6,7 @@ import axios from "axios";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
-import database from "./database";
+import DB from "../database";
 
 const test = async (): Promise<void> => {
   const dirOptions = {
@@ -52,8 +52,8 @@ const test = async (): Promise<void> => {
   const logger = winston.loggers.get("logger");
 
   // const res = await sdk.getFiles({ fields: "filename_download", limit: -1 });
-  const db = await database.newLocalDB("satirevdrupal");
-  const res = await db.query(
+  await DB.connect("satirevdrupal", "fillerpassword");
+  const res = await DB.db.query(
     `SELECT
         n.nid,
         urls.alias as relative_uri
@@ -64,7 +64,7 @@ const test = async (): Promise<void> => {
       GROUP BY n.nid,
         relative_uri`
   );
-  const res2 = await db.query(
+  const res2 = await DB.db.query(
     `SELECT * FROM url_alias WHERE source = 'node/716'`
   );
   const parsedGroup = JSON.parse(JSON.stringify(res[0])).map(e => e.nid);
@@ -73,7 +73,7 @@ const test = async (): Promise<void> => {
     arr.filter((item, index) => arr.indexOf(item) != index);
 
   const diff = findDuplicates(parsedGroup);
-  await db.end();
+  await DB.db.end();
   console.log(parsedGroup);
 };
 test();

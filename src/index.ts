@@ -5,9 +5,9 @@ import yargs from "yargs";
 import winston, { format } from "winston";
 import Bluebird from "bluebird";
 
-import Drupal, { DrupalArticle } from "./drupal";
+import Drupal, { DrupalArticle, globals } from "./drupal";
 import Directus from "./directus";
-import database from "./database";
+import DB from "./database";
 
 const { argv } = yargs
   .option("db", {
@@ -40,60 +40,57 @@ const { argv } = yargs
     "Please provide database password. Assumed to be running on localhost, user root, port 3306 (MySQL)"
   );
 
-const getDrupal = (drupal: Drupal): Promise<Array<DrupalArticle>> =>
-  drupal.genAllArticles();
+const defaultFormat = format.combine(
+  format.timestamp({ format: "longTime" }),
+  format.ms(),
+  format.align(),
+  format.errors({ stack: true }),
+  format.printf(info => {
+    info.level = info.level.toUpperCase();
+    return `[${info.timestamp}] ${info.ms
+      .replace(/[ms]/gi, "")
+      .padStart(6, " ")}ms ${info.level}: ${info.message} ${
+      info.durationMs ? `${info.durationMs}ms` : ""
+    }${info.stack ? `\n${util.format(info.stack)}\n` : ""} `;
+  })
+);
+
+winston.loggers.add("logger", {
+  level: "info",
+  format: defaultFormat,
+  transports: [
+    new winston.transports.File({
+      filename: "combined.log",
+      level: "info",
+      // handleExceptions: true,
+    }),
+    new winston.transports.File({
+      filename: "debug.log",
+      level: "debug",
+    }),
+    new winston.transports.Console({
+      format: format.colorize({ all: true }),
+      level: "info",
+    }),
+  ],
+});
+fs.unlinkSync("combined.log");
+fs.unlinkSync("debug.log");
+
+const logger = winston.loggers.get("logger");
 
 async function main(): Promise<void> {
-  const defaultFormat = format.combine(
-    format.timestamp({ format: "longTime" }),
-    format.ms(),
-    format.align(),
-    format.errors({ stack: true }),
-    format.printf(info => {
-      info.level = info.level.toUpperCase();
-      return `[${info.timestamp}] ${info.ms
-        .replace(/[ms]/gi, "")
-        .padStart(6, " ")}ms ${info.level}: ${info.message} ${
-        info.durationMs ? `${info.durationMs}ms` : ""
-      }${info.stack ? `\n${util.format(info.stack)}\n` : ""} `;
-    })
-  );
-
-  winston.loggers.add("logger", {
-    level: "info",
-    format: defaultFormat,
-    transports: [
-      new winston.transports.File({
-        filename: "combined.log",
-        level: "info",
-        // handleExceptions: true,
-      }),
-      new winston.transports.File({
-        filename: "debug.log",
-        level: "debug",
-      }),
-      new winston.transports.Console({
-        format: format.colorize({ all: true }),
-        level: "info",
-      }),
-    ],
-  });
-  fs.unlinkSync("combined.log");
-  fs.unlinkSync("debug.log");
-
-  const db = await database.newLocalDB(argv.db, argv.password);
-
-  const drupal = new Drupal(db);
-  const directus = new Directus(drupal);
+  await DB.connect(argv.db, argv.password);
+  const drupal = new Drupal();
+  const directus = new Directus();
   const categoryMap = await drupal.genDrupalCategoriesMap();
   const catQuery = Directus.createCategoriesImport(categoryMap);
   const deleteArticles = "DELETE FROM articles;\n";
   const ids = await directus.getImageIds();
   if (ids.data.length !== 0) await directus.deleteImages(ids.data);
-  drupal.logger.info("Deleted existing images");
-  const articles: Array<DrupalArticle> = await getDrupal(drupal);
-  drupal.createArticleProgressBar(argv.articleCount ?? articles.length);
-  drupal.createFilesProgressBar();
+  logger.info("Deleted existing images");
+  const articles: Array<DrupalArticle> = await drupal.genAllArticles();
+  globals.articleProgressBar.setTotal(argv.articleCount || articles.length);
   const articlesToGet = argv.articleCount
     ? articles.slice(0, argv.articleCount)
     : articles;
@@ -113,12 +110,12 @@ async function main(): Promise<void> {
       if (err) throw err;
     }
   );
-  const sentFiles = (await directus.sdk.getFiles({
-    limit: -1,
-    fields: "filename_download",
-  })) as any;
+  // const sentFiles = (await directus.sdk.getFiles({
+  //   limit: -1,
+  //   fields: "filename_download",
+  // })) as any;
 
-  const sentFilesSet = new Set(sentFiles.data.map(e => e.filename_download));
+  // const sentFilesSet = new Set(sentFiles.data.map(e => e.filename_download));
 
   drupal.stopMultibar();
   await drupal.stopDB();

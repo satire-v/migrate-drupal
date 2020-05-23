@@ -2,20 +2,17 @@
 
 import { IncomingMessage } from "http";
 
+import winston, { Logger } from "winston";
 import slug from "slug";
 import sharp, { Sharp } from "sharp";
 import mysql2 from "mysql2";
 import FormData from "form-data";
 import Bluebird from "bluebird";
-import {
-  // IFilesResponse,
-  IFileResponse,
-} from "@directus/sdk-js/dist/types/schemes/response/File";
-// import { IFile } from "@directus/sdk-js/dist/types/schemes/directus/File";
+import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
-import { Drupal, DrupalArticle } from "./drupal";
+import { Drupal, DrupalArticle } from "../drupal";
 
 const MB = 1024 * 1024;
 
@@ -25,18 +22,17 @@ export interface CategoryMap {
 
 // Directus main class
 class Directus {
-  drupal: Drupal;
-  sdk: SDK;
+  private sdk: SDK;
+  private logger: Logger;
 
-  constructor(drupal: Drupal) {
-    this.drupal = drupal;
+  constructor() {
     this.sdk = new SDK({
       mode: "cookie" as AuthModes,
       url: "http://api.satirev.org/",
       project: "satire-v",
       token: "letmeinyoubitch",
     });
-    this.drupal.setUploadFn(this.uploadImage.bind(this));
+    this.logger = winston.loggers.get("logger");
   }
 
   async getImageIds(): Promise<{ data: { id: number }[] }> {
@@ -55,7 +51,7 @@ class Directus {
   }
 
   /* deletes all the images for a clean migration from drupal */
-  async deleteImages(ids: Array<{ id: number }>): Bluebird<void> {
+  async deleteImages(ids: Array<{ id: number }>): Promise<void> {
     const idArray = ids.map(item => item.id);
     const idChunks = Directus.chunkArray(idArray, 100);
     await Bluebird.all(
@@ -78,7 +74,7 @@ class Directus {
         const transformer = sharp().png();
         file = fileData.pipe(transformer);
       }
-      this.drupal.logger.info(`Converting ${fileName} from gif to png`);
+      this.logger.info(`Converting ${fileName} from gif to png`);
       fileMimeType = "image/png";
       fileName = fileName.replace(".gif", ".png");
     } else if (
@@ -88,7 +84,7 @@ class Directus {
     ) {
       const transformer = sharp().resize(1000);
       file = fileData.pipe(transformer);
-      this.drupal.logger.info(
+      this.logger.info(
         `Resizing ${fileName} from ${fileData.headers["content-length"]}`
       );
     }
@@ -97,17 +93,17 @@ class Directus {
     form.append("filename_disk", fileName);
     form.append("data", file, fileName);
 
-    this.drupal.logger.debug(`Trying to upload ${fileName}`);
+    this.logger.debug(`Trying to upload ${fileName}`);
 
     const content: IFileResponse = await this.sdk.api
       .request("post", "/files", {}, form, false, { ...form.getHeaders() })
       .catch(e => {
-        this.drupal.logger.warn(`Failed uploading ${fileName}`);
-        this.drupal.logger.warn(e);
+        this.logger.warn(`Failed uploading ${fileName}`);
+        this.logger.warn(e);
         throw e;
       })
       .then(res => {
-        this.drupal.logger.debug(`Upload succeeeded for ${fileName}`);
+        this.logger.debug(`Upload succeeeded for ${fileName}`);
         return res;
       });
 
@@ -162,43 +158,44 @@ class Directus {
     article: DrupalArticle,
     categoryMap: CategoryMap
   ): Promise<string> {
-    const drupalArticleProcessor = this.drupal.newArticleProcessor(
-      article.title,
-      article.nid
-    );
-    // Drupal stores it as binary 1/0
-    const pub = article.status ? "published" : "draft";
-    const created = Directus.unixToSQLDate(article.created);
-    const changed = Directus.unixToSQLDate(article.changed);
-    // Quotes mess up sql queries, so we use sql escape fn
-    const title = mysql2.escape(article.title);
-    const tags = mysql2.escape(article.tags_info);
-    const caption = mysql2.escape(article.caption);
-    const teaser = mysql2.escape(article.teaser);
-    let categoryID = categoryMap[article.category_name];
-    if (categoryID == null) {
-      categoryID = categoryMap["Everything Else"];
-    }
-    const newSlug = slug(article.title, {
-      lower: true,
-    });
-    // keep old slug for backwards compatibility
-    const legacySlug = mysql2.escape(article.relative_path);
-    let imageID: number | null = null;
-    if (article.image_uri != null) {
-      const res = await drupalArticleProcessor.drupalToDirectusImage(
-        article.image_uri,
-        article.relative_path
-      );
-      if (res) imageID = res.imageID;
-    }
-    const body = mysql2.escape(
-      await drupalArticleProcessor.genProcessHTMLInlineFileTags(article)
-    );
-    const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${imageID}, ${caption}, ${teaser}, ${categoryID}, '${newSlug}', ${legacySlug})`;
-    // Done with this article's processing
-    this.drupal.incrementArticleBar();
-    return values;
+    // const drupalArticleProcessor = this.drupal.newArticleProcessor(
+    //   article.title,
+    //   article.nid
+    // );
+    // // Drupal stores it as binary 1/0
+    // const pub = article.status ? "published" : "draft";
+    // const created = Directus.unixToSQLDate(article.created);
+    // const changed = Directus.unixToSQLDate(article.changed);
+    // // Quotes mess up sql queries, so we use sql escape fn
+    // const title = mysql2.escape(article.title);
+    // const tags = mysql2.escape(article.tags_info);
+    // const caption = mysql2.escape(article.caption);
+    // const teaser = mysql2.escape(article.teaser);
+    // let categoryID = categoryMap[article.category_name];
+    // if (categoryID == null) {
+    //   categoryID = categoryMap["Everything Else"];
+    // }
+    // const newSlug = slug(article.title, {
+    //   lower: true,
+    // });
+    // // keep old slug for backwards compatibility
+    // const legacySlug = mysql2.escape(article.relative_path);
+    // let imageID: number | null = null;
+    // if (article.image_uri != null) {
+    //   const res = await drupalArticleProcessor.drupalToDirectusImage(
+    //     article.image_uri,
+    //     article.relative_path
+    //   );
+    //   if (res) imageID = res.imageID;
+    // }
+    // const body = mysql2.escape(
+    //   await drupalArticleProcessor.genProcessHTMLInlineFileTags(article)
+    // );
+    // const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${imageID}, ${caption}, ${teaser}, ${categoryID}, '${newSlug}', ${legacySlug})`;
+    // // Done with this article's processing
+    // // this.drupal.incrementArticleBar();
+    // return values;
+    return "";
   }
 }
 

@@ -2,9 +2,10 @@ import winston, { Logger } from "winston";
 import cheerio from "cheerio";
 import Bluebird from "bluebird";
 
-import DrupalImage from "./image";
+import DB from "../database";
 
-import Drupal, { DrupalArticle } from "./index";
+// import DrupalImage from "./image";
+import Drupal, { DrupalArticle } from "./drupal";
 
 export default class DrupalArticleProcessor {
   public drupal: Drupal;
@@ -30,10 +31,7 @@ export default class DrupalArticleProcessor {
     const fid = this.drupal.findFID(fileObj);
     const [
       nodes,
-    ] = await this.drupal.db.query(
-      "SELECT uri FROM file_managed WHERE fid = ?",
-      [fid]
-    );
+    ] = await DB.db.query("SELECT uri FROM file_managed WHERE fid = ?", [fid]);
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
   }
 
@@ -65,11 +63,11 @@ export default class DrupalArticleProcessor {
         $(el).remove();
         return;
       }
-      const res = await this.drupalToDirectusImage(src, relativePath);
-      if (res?.fullUri == null) {
-        return;
-      }
-      $(el).attr("src", res.fullUri);
+      // const res = await this.drupalToDirectusImage(src, relativePath);
+      // if (res?.fullUri == null) {
+      //   return;
+      // }
+      // $(el).attr("src", res.fullUri);
     });
     return $.html();
   }
