@@ -1,17 +1,17 @@
-import winston, { Logger } from "winston";
 import cheerio from "cheerio";
 import Bluebird from "bluebird";
 
+import logger from "../logger";
 import DB from "../database";
 
-// import DrupalImage from "./image";
 import Drupal, { DrupalArticle } from "./drupal";
+
+// import DrupalImage from "./image";
 
 export default class DrupalArticleProcessor {
   public drupal: Drupal;
   public title: string;
   public nid: number;
-  private logger: Logger;
 
   private i: number;
 
@@ -20,7 +20,6 @@ export default class DrupalArticleProcessor {
     this.title = title;
     this.nid = nid;
     this.i = 0;
-    this.logger = winston.loggers.get("logger");
   }
 
   /*
@@ -29,9 +28,10 @@ export default class DrupalArticleProcessor {
 
   async genManagedFileToHTMLTag(fileObj: object): Promise<string> {
     const fid = this.drupal.findFID(fileObj);
-    const [
-      nodes,
-    ] = await DB.db.query("SELECT uri FROM file_managed WHERE fid = ?", [fid]);
+    const [nodes] = await DB.query(
+      "SELECT uri FROM file_managed WHERE fid = ?",
+      [fid]
+    );
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
   }
 

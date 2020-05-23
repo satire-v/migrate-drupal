@@ -5,13 +5,13 @@ import { IncomingMessage } from "http";
 import winston, { Logger } from "winston";
 import slug from "slug";
 import sharp, { Sharp } from "sharp";
-import mysql2 from "mysql2";
 import FormData from "form-data";
 import Bluebird from "bluebird";
 import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
+import logger from "../logger";
 import { Drupal, DrupalArticle } from "../drupal";
 
 const MB = 1024 * 1024;
@@ -23,7 +23,6 @@ export interface CategoryMap {
 // Directus main class
 class Directus {
   private sdk: SDK;
-  private logger: Logger;
 
   constructor() {
     this.sdk = new SDK({
@@ -32,7 +31,6 @@ class Directus {
       project: "satire-v",
       token: "letmeinyoubitch",
     });
-    this.logger = winston.loggers.get("logger");
   }
 
   async getImageIds(): Promise<{ data: { id: number }[] }> {
@@ -74,7 +72,7 @@ class Directus {
         const transformer = sharp().png();
         file = fileData.pipe(transformer);
       }
-      this.logger.info(`Converting ${fileName} from gif to png`);
+      logger.info(`Converting ${fileName} from gif to png`);
       fileMimeType = "image/png";
       fileName = fileName.replace(".gif", ".png");
     } else if (
@@ -84,7 +82,7 @@ class Directus {
     ) {
       const transformer = sharp().resize(1000);
       file = fileData.pipe(transformer);
-      this.logger.info(
+      logger.info(
         `Resizing ${fileName} from ${fileData.headers["content-length"]}`
       );
     }
@@ -93,17 +91,17 @@ class Directus {
     form.append("filename_disk", fileName);
     form.append("data", file, fileName);
 
-    this.logger.debug(`Trying to upload ${fileName}`);
+    logger.debug(`Trying to upload ${fileName}`);
 
     const content: IFileResponse = await this.sdk.api
       .request("post", "/files", {}, form, false, { ...form.getHeaders() })
       .catch(e => {
-        this.logger.warn(`Failed uploading ${fileName}`);
-        this.logger.warn(e);
+        logger.warn(`Failed uploading ${fileName}`);
+        logger.warn(e);
         throw e;
       })
       .then(res => {
-        this.logger.debug(`Upload succeeeded for ${fileName}`);
+        logger.debug(`Upload succeeeded for ${fileName}`);
         return res;
       });
 

@@ -1,11 +1,11 @@
-// import { IncomingMessage } from "http";
-// import { Buffer } from "buffer";
+import { IncomingMessage } from "http";
+import { Buffer } from "buffer";
 
-// import winston, { Logger } from "winston";
-// import Bluebird from "bluebird";
-// import axios from "axios";
+import Bluebird from "bluebird";
+import axios from "axios";
 
-// import utils from "../utils";
+import utils from "../utils";
+import logger from "../logger";
 
 // export default class DrupalImage {
 //   public origFileName: string | null;

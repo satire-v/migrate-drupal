@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/camelcase */
 import { IncomingMessage } from "http";
 
-import winston, { Logger } from "winston";
 import { RowDataPacket, FieldPacket } from "mysql2/promise";
 import cliProgress, { MultiBar, SingleBar } from "cli-progress";
 
+import logger from "../logger";
 import { CategoryMap } from "../directus";
 import DB from "../database";
 
@@ -33,7 +33,6 @@ export interface DrupalGlobals {
   articleProgressBar: SingleBar;
   filesProgressBar: SingleBar;
   filesTotal: number;
-  logger: Logger;
   files: string[];
   filesLeft: string[];
   fileTimeout: number;
@@ -52,7 +51,6 @@ const multibar = new cliProgress.MultiBar({
 export const globals: DrupalGlobals = {
   multibar: multibar,
   filesTotal: 0,
-  logger: winston.loggers.get("logger"),
   files: [],
   filesLeft: [],
   fileTimeout: 15000,
@@ -83,10 +81,6 @@ class Drupal {
   /*
    * Progress bar methods
    */
-
-  async stopDB(): Promise<void> {
-    await DB.db.end();
-  }
 
   stopMultibar(): void | null {
     return globals.multibar.stop();
@@ -168,9 +162,10 @@ class Drupal {
    */
 
   async genAllArticles(): Promise<DrupalArticle[]> {
-    const res: [RowDataPacket[], FieldPacket[]] = await DB.db.query(
-      Drupal.getDrupalArticlesQuery()
-    );
+    const res = (await DB.query(Drupal.getDrupalArticlesQuery())) as [
+      RowDataPacket[],
+      FieldPacket[]
+    ];
     const nodes = res[0];
     const articles = JSON.parse(
       JSON.stringify(
@@ -192,9 +187,10 @@ class Drupal {
       name: string;
       tid: number;
     }
-    const res: [CategoryEntry[], FieldPacket[]] = await DB.db.query(
-      Drupal.getDrupalCategoriesQuery()
-    );
+    const res = (await DB.query(Drupal.getDrupalCategoriesQuery())) as [
+      CategoryEntry[],
+      FieldPacket[]
+    ];
     const entries = res[0];
     const categories = {} as { [name: string]: number };
     entries.forEach(entry => {

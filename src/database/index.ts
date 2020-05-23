@@ -1,32 +1,57 @@
-import winston, { Logger } from "winston";
-import mysql2, { Connection } from "mysql2/promise";
+import mysql2, {
+  Connection,
+  RowDataPacket,
+  OkPacket,
+  FieldPacket,
+  QueryOptions,
+} from "mysql2/promise";
 
-class DB {
-  private connection?: Connection;
-  private logger: Logger;
+import logger from "../logger";
+import args from "../args";
+
+type QueryReponse = [
+  RowDataPacket[][] | RowDataPacket[] | OkPacket | OkPacket[],
+  FieldPacket[]
+];
+
+type QueryArgs =
+  | [string]
+  | [string, any | any[] | { [param: string]: any }]
+  | [QueryOptions]
+  | [QueryOptions, any | any[] | { [param: string]: any }];
+
+class Database {
+  private connection: Promise<Connection>;
 
   constructor() {
-    this.logger = winston.loggers.get("logger");
+    this.connection = this.connect();
   }
 
-  public async connect(dbName: string, password: string): Promise<void> {
+  private async connect(): Promise<Connection> {
     try {
-      this.connection = await mysql2.createConnection({
+      return mysql2.createConnection({
         host: "localhost",
         user: "root",
-        database: dbName,
-        password,
+        database: args.db,
+        password: args.password,
       });
     } catch (e) {
-      this.logger.error(e);
+      logger.error(e);
       throw e;
     }
   }
 
-  get db(): Connection {
-    if (!this.connection) throw Error("No database connection established");
-    return this.connection;
+  public async query(args: QueryArgs): Promise<QueryReponse> {
+    const db = await this.connection;
+    return db.query.apply(null, args);
+  }
+
+  public async stop(): Promise<void> {
+    const db = await this.connection;
+    await db.end();
   }
 }
 
-export default new DB();
+const DB = new Database();
+
+export default DB;
