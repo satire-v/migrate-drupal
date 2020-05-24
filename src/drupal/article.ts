@@ -1,16 +1,15 @@
 /* eslint-disable @typescript-eslint/camelcase */
-import { IncomingMessage } from "http";
-
 import { RowDataPacket, FieldPacket } from "mysql2/promise";
-import cliProgress, { MultiBar, SingleBar } from "cli-progress";
+import cheerio from "cheerio";
+import Bluebird from "bluebird";
 
 import logger from "../logger";
 import { CategoryMap } from "../directus";
 import DB from "../database";
 
-import DrupalArticleProcessor from "./articleProessor";
+// import DrupalImage from "./image";
 
-export interface DrupalArticle {
+export interface ArticleData {
   nid: number;
   title: string;
   created: number;
@@ -28,83 +27,19 @@ export interface DrupalArticle {
   tags_info: string;
 }
 
-export interface DrupalGlobals {
-  multibar: MultiBar;
-  articleProgressBar: SingleBar;
-  filesProgressBar: SingleBar;
-  filesTotal: number;
-  files: string[];
-  filesLeft: string[];
-  fileTimeout: number;
-}
+export default class Article {
+  // public static filesTotal = 0;
+  // public static files: string[] = [];
+  // public static filesLeft: string[] = []; Go on Image as static?
+  private _article: ArticleData;
+  private _i: number;
 
-const multibar = new cliProgress.MultiBar({
-  format: "{value}/{total} | {percentage}% | {bar} | {message}",
-  clearOnComplete: false,
-  stream: process.stderr,
-  noTTYOutput: false,
-  notTTYSchedule: 0,
-  forceRedraw: false,
-  hideCursor: true,
-});
-
-export const globals: DrupalGlobals = {
-  multibar: multibar,
-  filesTotal: 0,
-  files: [],
-  filesLeft: [],
-  fileTimeout: 15000,
-  articleProgressBar: multibar.create(0, 0, {
-    message: "Articles",
-  }),
-  filesProgressBar: multibar.create(this.filesTotal, 0, {
-    message: "Files",
-  }),
-};
-
-export type UploadFileFn = (
-  fileData: Buffer | IncomingMessage,
-  fileName: string,
-  fileMimeType: string
-) => Promise<UploadFileFnReturnType>;
-
-export type UploadFileFnReturnType = { fullUri: string; imageID: number };
-
-class Drupal {
-  constructor() {}
-
-  newArticleProcessor(title: string, nid: number): DrupalArticleProcessor {
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
-    return new DrupalArticleProcessor(this, title, nid);
+  constructor(article: ArticleData) {
+    this._article = article;
+    this._i = 0;
   }
 
-  /*
-   * Progress bar methods
-   */
-
-  stopMultibar(): void | null {
-    return globals.multibar.stop();
-  }
-
-  increaseFilesBarTotal(): void | null {
-    globals.filesTotal += 1;
-    return globals.filesProgressBar.setTotal(globals.filesTotal);
-  }
-
-  incrementFilesBar(delta: number): void | null {
-    return globals.filesProgressBar.increment(delta);
-  }
-
-  incrementArticleBar(): void | null {
-    return globals.articleProgressBar.increment();
-  }
-
-  /*
-   * Query construction methods
-   */
-
-  static getDrupalArticlesQuery(): string {
-    return `SELECT
+  private static _allArticlesQuery = `SELECT
         n.nid,
         n.title,
         n.created,
@@ -151,18 +86,12 @@ class Drupal {
         image_uri,
         relative_path
       ORDER BY n.created DESC`;
-  }
 
-  static getDrupalCategoriesQuery(): string {
-    return "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
-  }
+  private static _categoriesQuerty =
+    "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
 
-  /*
-   * Database get methods
-   */
-
-  async genAllArticles(): Promise<DrupalArticle[]> {
-    const res = (await DB.query(Drupal.getDrupalArticlesQuery())) as [
+  public static async genAllArticles(): Promise<ArticleData[]> {
+    const res = (await DB.query(Article._allArticlesQuery)) as [
       RowDataPacket[],
       FieldPacket[]
     ];
@@ -179,15 +108,16 @@ class Drupal {
   }
 
   /**
-   * @method @async
+   * @method @public @static @async
+   * @returns { Promise<CategoryMap> }
    * Maps category names to category ids from the drupal database
    */
-  async genDrupalCategoriesMap(): Promise<CategoryMap> {
+  public static async genDrupalCategoriesMap(): Promise<CategoryMap> {
     interface CategoryEntry extends RowDataPacket {
       name: string;
       tid: number;
     }
-    const res = (await DB.query(Drupal.getDrupalCategoriesQuery())) as [
+    const res = (await DB.query(Article._categoriesQuerty)) as [
       CategoryEntry[],
       FieldPacket[]
     ];
@@ -199,11 +129,7 @@ class Drupal {
     return categories;
   }
 
-  /*
-   * Parsing util functions
-   */
-
-  findFID(obj: object): number | null {
+  public static findFID(obj: object): number | null {
     if (obj === null || typeof obj !== "object") return null;
     let res: null | number = null;
     Object.keys(obj).forEach(key => {
@@ -212,6 +138,52 @@ class Drupal {
     });
     return res;
   }
-}
 
-export default Drupal;
+  private static async genManagedFileHTMLTag(fileObj: object): Promise<string> {
+    const fid = Article.findFID(fileObj);
+    const [nodes] = await DB.query(
+      "SELECT uri FROM file_managed WHERE fid = ?",
+      [fid]
+    );
+    return `<img src="${encodeURI(nodes[0].uri)}" />`;
+  }
+
+  async convertManagedFilesToImgTags(htmlBody: string): Promise<string> {
+    const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
+    let newBody = htmlBody;
+    if (managedFiles != null) {
+      await Bluebird.each(managedFiles, async fileObjStr => {
+        const fileObj = JSON.parse(fileObjStr);
+        const tag = await Article.genManagedFileHTMLTag(fileObj);
+        newBody = newBody.replace(fileObjStr, tag);
+      });
+    }
+    return newBody;
+  }
+
+  async genProcessHTMLImageTags(
+    htmlBody: string,
+    relativePath: string
+  ): Promise<string> {
+    const $ = cheerio.load(htmlBody);
+    await Bluebird.map($("img").toArray(), async el => {
+      const src = $(el).attr("src") as string;
+      if (src.match(/cleardot.gif/gi)) {
+        $(el).remove();
+        return;
+      }
+      const res = await this.drupalToDirectusImage(src, relativePath);
+      if (res?.fullUri == null) {
+        return;
+      }
+      $(el).attr("src", res.fullUri);
+    });
+    return $.html();
+  }
+
+  async genProcessHTMLInlineFileTags(postData: ArticleData): Promise<string> {
+    const res1 = await this.convertManagedFilesToImgTags(postData.body);
+    const res2 = this.genProcessHTMLImageTags(res1, postData.relative_path);
+    return res2;
+  }
+}

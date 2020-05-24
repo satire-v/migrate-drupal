@@ -6,7 +6,7 @@ import axios from "axios";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
-import DB from "../database";
+import DB from "./database";
 
 const test = async (): Promise<void> => {
   const dirOptions = {

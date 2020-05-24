@@ -40,6 +40,7 @@ module.exports = {
       },
     ],
     "@typescript-eslint/no-empty-function": "off",
+    "@typescript-eslint/interface-name-prefix": "off",
     "import/no-named-as-default-member": "off",
     "import/no-unresolved": "off",
     "import/extensions": "off",
