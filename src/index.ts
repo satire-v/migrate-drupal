@@ -3,7 +3,6 @@ import fs from "fs";
 import Bluebird from "bluebird";
 
 import progress from "./progress";
-import logger from "./logger";
 import DrupalArticle, { ArticleData } from "./drupal/article";
 import directus from "./directus";
 import DB from "./database";

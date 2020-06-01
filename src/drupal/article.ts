@@ -4,11 +4,10 @@ import cheerio from "cheerio";
 import Bluebird from "bluebird";
 
 import logger from "../logger";
+import directus from "../directus";
 import DB from "../database";
 
 import { newImage } from "./image";
-
-// import DrupalImage from "./image";
 
 export interface CategoryMap {
   [name: string]: number;
@@ -33,11 +32,10 @@ export interface ArticleData {
 }
 
 export default class Article {
-  // public static filesTotal = 0;
-  // public static files: string[] = [];
-  // public static filesLeft: string[] = []; Go on Image as static?
-  private _i: number;
   public static categoryMap: Promise<CategoryMap> = Article.getCategoryMap();
+
+  private _i: number;
+
   public title: string;
   public created: number;
   public changed: number;
@@ -74,7 +72,7 @@ export default class Article {
       this.image_id = null;
     } else {
       const image = newImage(image_uri, relative_path);
-      this.image_id = image.imageID;
+      this.image_id = directus.uploadImage(image).then(res => res.imageID);
     }
   }
 
@@ -218,10 +216,11 @@ export default class Article {
       }
       const image = newImage(src, relativePath, this._i);
       this._i++;
-      if ((await image.directusUri) == null) {
+      const res = await directus.uploadImage(image);
+      if (res.directusUri == null) {
         return;
       }
-      $(el).attr("src", await image.directusUri);
+      $(el).attr("src", res.directusUri);
     });
     return $.html();
   }

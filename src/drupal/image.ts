@@ -3,7 +3,6 @@ import { IncomingMessage } from "http";
 import { Buffer } from "buffer";
 
 import sharp from "sharp";
-import retry from "bluebird-retry";
 import Bluebird from "bluebird";
 import axios, { AxiosRequestConfig } from "axios";
 
@@ -11,15 +10,15 @@ import * as utils from "../utils";
 import progress from "../progress";
 import logger from "../logger";
 import { FILE_TIMEOUT } from "../index";
-import Directus from "../directus";
 
 const MB = 1024 * 1024;
 
-function isBase64(srcUri): boolean {
-  return !!srcUri.match(/.*data:image.*/);
-}
-
 export abstract class DrupalImage {
+  public static filesTotal = 0;
+  public static files: string[] = [];
+  public static filesLeft: string[] = []; //Go on Image as static?
+  private _id: number;
+
   protected _srcUri: string;
   protected _articlePath: string;
 
@@ -31,67 +30,26 @@ export abstract class DrupalImage {
     | Buffer
     | NodeJS.ReadableStream
     | Promise<NodeJS.ReadableStream>;
-  public directusUri: Promise<string>;
-  public imageID: Promise<number>;
 
   constructor(srcUri: string, relativePath: string) {
     this._srcUri = srcUri;
     this._articlePath = relativePath;
-    this.directusUri = this.upload().then(res => res.directusUri);
-    this.imageID = this.upload().then(res => res.imageID);
+    DrupalImage.filesTotal++;
+    this._id = progress.FilesBarTotal = DrupalImage.filesTotal;
   }
 
-  private async upload(): Promise<{
-    directusUri: string;
-    imageID: number;
-  }> {
-    progress.incFilesBar();
+  protected resolveDuplicateName(logName: string): string {
+    let res = logName;
+    if (DrupalImage.files.includes(logName)) {
+      logger.error(`Duplicate name: ${logName}`);
 
-    // TODO: Check for repeats
-    // if (files.includes(logName)) {
-    //   logger.warn(`Already tried to process ${this.logName}`);
-    // }
-    // files.push(this.logName);
-    // filesLeft.push(this.logName);
-    const res = await retry<{
-      directusUri: string;
-      imageID: number;
-    }>(
-      async () => {
-        const data = await this.data;
-        if (!data) {
-          return null;
-        }
-
-        const uploadResults = await Directus.uploadImage(this).catch(err => {
-          logger.warn(`Retrying upload for ${this.logName}`);
-          logger.warn(err);
-          throw err;
-        });
-        return uploadResults;
-      },
-      { throw_original: true }
-    ).catch(err => {
-      logger.error(`Coundn't transfer file ${this.logName}`);
-      logger.error(err);
-      throw err;
-    });
-    // .then(response => {
-    //   const index = filesLeft.indexOf(this.logName);
-
-    //   if (index > -1) {
-    //    filesLeft.splice(index, 1);
-    //   }
-
-    //   progress.incFilesBar();
-
-    //   return response;
-    // })
-    // .finally(() => {
-    //   if (filesLeft.length < 5) {
-    //     logger.debug(`LEFT: ${filesLeft}`);
-    //   }
-    // });
+      res = logName.replace(
+        /\.[^.]+$/,
+        (match: string) => `${this._id}${match}`
+      );
+    }
+    DrupalImage.files.push(res);
+    DrupalImage.filesLeft.push(res);
     return res;
   }
 }
@@ -113,15 +71,17 @@ class Base64DrupalImage extends DrupalImage {
     [, this._ext] = fileMimeType.split("/");
     this.data = Buffer.from(base64src, "base64");
 
-    this.fileName = `${utils
-      .sanitizePath(this._articlePath)
-      .slice(0, 15)}-inline-image-${this._i}.${this._ext}`;
+    this.logName = this.fileName = this.resolveDuplicateName(
+      `${utils.sanitizePath(this._articlePath).slice(0, 15)}-inline-image-${
+        this._i
+      }.${this._ext}`
+    );
+
     if (this._ext === "gif") {
       this.data = sharp(this.data).png();
-      logger.info(`Converting ${this.fileName} from gif to png`);
+      logger.info(`Converting ${this.logName} from gif to png`);
     }
     this.fileName.replace("gif", "png");
-    this.logName = this.fileName;
   }
 }
 
@@ -135,7 +95,7 @@ class FileDrupalImage extends DrupalImage {
 
   constructor(srcUri: string, relativePath: string) {
     super(srcUri, relativePath);
-    this.logName = utils.getFileNameFromUri(srcUri);
+    this.logName = this.resolveDuplicateName(utils.getFileNameFromUri(srcUri));
     this._fullSrcUri = this.getSrcUri();
     this.fileName = this.getFileName().then(res => res.fileName);
     this._ext = this.getFileName().then(res => res.ext);
@@ -277,6 +237,10 @@ class FileDrupalImage extends DrupalImage {
 
     return data;
   }
+}
+
+function isBase64(srcUri): boolean {
+  return !!srcUri.match(/.*data:image.*/);
 }
 
 export function newImage(

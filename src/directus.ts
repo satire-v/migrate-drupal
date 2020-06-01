@@ -3,6 +3,7 @@
 import slug from "slug";
 import mysql2 from "mysql2";
 import FormData from "form-data";
+import retry from "bluebird-retry";
 import Bluebird from "bluebird";
 import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
@@ -87,30 +88,52 @@ class Directus {
   public async uploadImage<T extends DrupalImage>(
     image: T
   ): Promise<{ directusUri: string; imageID: number }> {
-    const fileName = await image.fileName;
-    const data = await image.data;
-    const form = new FormData();
-    form.append("filename_download", fileName);
-    form.append("filename_disk", fileName);
-    form.append("data", data, fileName);
+    const res = await retry<{
+      directusUri: string;
+      imageID: number;
+    }>(
+      async () => {
+        const data = await image.data; // Download part
+        if (!data) {
+          return null;
+        }
+        const fileName = await image.fileName;
+        const form = new FormData();
+        form.append("filename_download", fileName);
+        form.append("filename_disk", fileName);
+        form.append("data", data, fileName);
 
-    logger.debug(`Trying to upload ${image.logName}`);
+        logger.debug(`Trying to upload ${image.logName}`);
 
-    const content: IFileResponse = await this.sdk.api
-      .request("post", "/files", {}, form, false, { ...form.getHeaders() })
-      .catch(e => {
-        logger.warn(`Failed uploading ${fileName}`);
-        logger.warn(e);
-        throw e;
-      })
-      .then(res => {
-        logger.debug(`Upload succeeeded for ${fileName}`);
-        return res;
-      });
-    return {
-      directusUri: (content.data.data as { full_url: string }).full_url,
-      imageID: content.data.id,
-    };
+        const content: IFileResponse = await this.sdk.api
+          .request("post", "/files", {}, form, false, { ...form.getHeaders() })
+          .catch(e => {
+            logger.warn(`Failed an upload attempt ${image.logName}; Retrying`);
+            logger.warn(e);
+            throw e;
+          })
+          .then(res => {
+            logger.debug(`Upload succeeeded for ${image.logName}`);
+            return res;
+          });
+        return {
+          directusUri: (content.data.data as { full_url: string }).full_url,
+          imageID: content.data.id,
+        };
+      },
+      { throw_original: true }
+    ).catch(err => {
+      logger.error(`Coundn't transfer file ${image.logName}`);
+      logger.error(err);
+      throw err;
+    });
+
+    const index = DrupalImage.filesLeft.indexOf(image.logName);
+    if (index > -1) {
+      DrupalImage.filesLeft.splice(index, 1);
+    }
+    progress.incFilesBar();
+    return res;
   }
 
   /* The big one. Creates the SQL query to insert an article, all of the fields */
