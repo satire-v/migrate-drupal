@@ -155,8 +155,9 @@ class Directus {
     });
     // keep old slug for backwards compatibility
     const legacySlug = mysql2.escape(article.relative_path);
+    const body = mysql2.escape(await article.body);
 
-    const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${await article.body}, ${tags}, ${await article.image_id}, ${caption}, ${teaser}, ${await article.category_id}, '${newSlug}', ${legacySlug})`;
+    const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${await article.image_id}, ${caption}, ${teaser}, ${await article.category_id}, '${newSlug}', ${legacySlug})`;
     // Done with this article's processing
     progress.incArticlesBar();
     return values;

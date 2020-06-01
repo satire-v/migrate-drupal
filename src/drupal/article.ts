@@ -32,6 +32,9 @@ export interface ArticleData {
 }
 
 export default class Article {
+  private static _categoriesQuery =
+    "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
+
   public static categoryMap: Promise<CategoryMap> = Article.getCategoryMap();
 
   private _i: number;
@@ -76,14 +79,6 @@ export default class Article {
     }
   }
 
-  private static _categoriesQuery =
-    "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
-
-  /**
-   * @method @public @static @async
-   * @returns { Promise<CategoryMap> }
-   * Maps category names to category ids from the drupal database
-   */
   private static async getCategoryMap(): Promise<CategoryMap> {
     interface CategoryEntry extends RowDataPacket {
       name: string;

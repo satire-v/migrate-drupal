@@ -19,9 +19,9 @@ async function main(): Promise<void> {
 
   const articlesProcessed = await Bluebird.map(
     articles,
-    article => {
+    async article => {
       const Article = new DrupalArticle(article);
-      directus.createArticleImportQuery(Article);
+      return await directus.createArticleImportQuery(Article);
     },
     { concurrency: args.concurrency }
   );
