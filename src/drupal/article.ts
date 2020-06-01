@@ -4,10 +4,15 @@ import cheerio from "cheerio";
 import Bluebird from "bluebird";
 
 import logger from "../logger";
-import { CategoryMap } from "../directus";
 import DB from "../database";
 
+import { newImage } from "./image";
+
 // import DrupalImage from "./image";
+
+export interface CategoryMap {
+  [name: string]: number;
+}
 
 export interface ArticleData {
   nid: number;
@@ -17,8 +22,8 @@ export interface ArticleData {
   status: 0 | 1;
   body: string;
   caption: string;
-  category_id: number;
-  category_name: string;
+  category_id: number | null;
+  category_name: string | null;
   teaser: string;
   year: number;
   image_id: number | null;
@@ -31,15 +36,76 @@ export default class Article {
   // public static filesTotal = 0;
   // public static files: string[] = [];
   // public static filesLeft: string[] = []; Go on Image as static?
-  private _article: ArticleData;
   private _i: number;
+  public static categoryMap: Promise<CategoryMap> = Article.getCategoryMap();
+  public title: string;
+  public created: number;
+  public changed: number;
+  public status: 0 | 1;
+  public body: Promise<string>;
+  public caption: string;
+  public category_id: Promise<number>;
+  public teaser: string;
+  public image_id: Promise<number> | null;
+  public relative_path: string;
+  public tags_info: string;
 
   constructor(article: ArticleData) {
-    this._article = article;
     this._i = 0;
+    const {
+      category_name,
+      category_id,
+      image_uri,
+      body,
+      relative_path,
+    } = article;
+    this.title = article.title;
+    this.created = article.created;
+    this.changed = article.changed;
+    this.status = article.status;
+    this.caption = article.caption;
+    this.teaser = article.teaser;
+    this.relative_path = relative_path;
+    this.tags_info = article.tags_info;
+
+    this.body = this.genProcessBody(body, relative_path);
+    this.category_id = this.genCategoryID(category_id, category_name);
+    if (!image_uri) {
+      this.image_id = null;
+    } else {
+      const image = newImage(image_uri, relative_path);
+      this.image_id = image.imageID;
+    }
   }
 
-  private static _allArticlesQuery = `SELECT
+  private static _categoriesQuery =
+    "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
+
+  /**
+   * @method @public @static @async
+   * @returns { Promise<CategoryMap> }
+   * Maps category names to category ids from the drupal database
+   */
+  private static async getCategoryMap(): Promise<CategoryMap> {
+    interface CategoryEntry extends RowDataPacket {
+      name: string;
+      tid: number;
+    }
+    const res = (await DB.query(Article._categoriesQuery)) as [
+      CategoryEntry[],
+      FieldPacket[]
+    ];
+    const entries = res[0];
+    const categories = {} as { [name: string]: number };
+    entries.forEach(entry => {
+      categories[entry.name] = entry.tid;
+    });
+    logger.info("Generated category map");
+    return categories;
+  }
+
+  private static allArticlesQuery(limit?: number): string {
+    return `SELECT
         n.nid,
         n.title,
         n.created,
@@ -85,13 +151,11 @@ export default class Article {
         image_id,
         image_uri,
         relative_path
-      ORDER BY n.created DESC`;
+      ORDER BY n.created DESC ${limit ? `LIMIT ${limit}` : ""}`;
+  }
 
-  private static _categoriesQuerty =
-    "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
-
-  public static async genAllArticles(): Promise<ArticleData[]> {
-    const res = (await DB.query(Article._allArticlesQuery)) as [
+  public static async genAllArticles(limit?: number): Promise<ArticleData[]> {
+    const res = (await DB.query(Article.allArticlesQuery(limit))) as [
       RowDataPacket[],
       FieldPacket[]
     ];
@@ -107,29 +171,7 @@ export default class Article {
     return articles;
   }
 
-  /**
-   * @method @public @static @async
-   * @returns { Promise<CategoryMap> }
-   * Maps category names to category ids from the drupal database
-   */
-  public static async genDrupalCategoriesMap(): Promise<CategoryMap> {
-    interface CategoryEntry extends RowDataPacket {
-      name: string;
-      tid: number;
-    }
-    const res = (await DB.query(Article._categoriesQuerty)) as [
-      CategoryEntry[],
-      FieldPacket[]
-    ];
-    const entries = res[0];
-    const categories = {} as { [name: string]: number };
-    entries.forEach(entry => {
-      categories[entry.name] = entry.tid;
-    });
-    return categories;
-  }
-
-  public static findFID(obj: object): number | null {
+  public findFID(obj: object): number | null {
     if (obj === null || typeof obj !== "object") return null;
     let res: null | number = null;
     Object.keys(obj).forEach(key => {
@@ -139,8 +181,8 @@ export default class Article {
     return res;
   }
 
-  private static async genManagedFileHTMLTag(fileObj: object): Promise<string> {
-    const fid = Article.findFID(fileObj);
+  private async genManagedFileHTMLTag(fileObj: object): Promise<string> {
+    const fid = this.findFID(fileObj);
     const [nodes] = await DB.query(
       "SELECT uri FROM file_managed WHERE fid = ?",
       [fid]
@@ -148,20 +190,22 @@ export default class Article {
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
   }
 
-  async convertManagedFilesToImgTags(htmlBody: string): Promise<string> {
+  private async convertManagedFilesToImgTags(
+    htmlBody: string
+  ): Promise<string> {
     const managedFiles = htmlBody.match(/(\[{2}.+?fid.+?\]{2})/g);
     let newBody = htmlBody;
     if (managedFiles != null) {
       await Bluebird.each(managedFiles, async fileObjStr => {
         const fileObj = JSON.parse(fileObjStr);
-        const tag = await Article.genManagedFileHTMLTag(fileObj);
+        const tag = await this.genManagedFileHTMLTag(fileObj);
         newBody = newBody.replace(fileObjStr, tag);
       });
     }
     return newBody;
   }
 
-  async genProcessHTMLImageTags(
+  private async genProcessHTMLImageTags(
     htmlBody: string,
     relativePath: string
   ): Promise<string> {
@@ -172,18 +216,32 @@ export default class Article {
         $(el).remove();
         return;
       }
-      const res = await this.drupalToDirectusImage(src, relativePath);
-      if (res?.fullUri == null) {
+      const image = newImage(src, relativePath, this._i);
+      this._i++;
+      if ((await image.directusUri) == null) {
         return;
       }
-      $(el).attr("src", res.fullUri);
+      $(el).attr("src", await image.directusUri);
     });
     return $.html();
   }
 
-  async genProcessHTMLInlineFileTags(postData: ArticleData): Promise<string> {
-    const res1 = await this.convertManagedFilesToImgTags(postData.body);
-    const res2 = this.genProcessHTMLImageTags(res1, postData.relative_path);
+  private async genProcessBody(
+    body: string,
+    relative_path: string
+  ): Promise<string> {
+    const res1 = await this.convertManagedFilesToImgTags(body);
+    const res2 = this.genProcessHTMLImageTags(res1, relative_path);
     return res2;
+  }
+
+  private async genCategoryID(
+    category_id: number | null,
+    category_name: string | null
+  ): Promise<number> {
+    if (!category_name || !category_id) {
+      return (await Article.categoryMap)["Everything Else"];
+    }
+    return category_id;
   }
 }

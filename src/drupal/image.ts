@@ -1,47 +1,108 @@
+/* eslint-disable @typescript-eslint/camelcase */
 import { IncomingMessage } from "http";
 import { Buffer } from "buffer";
 
+import sharp from "sharp";
+import retry from "bluebird-retry";
 import Bluebird from "bluebird";
 import axios, { AxiosRequestConfig } from "axios";
 
 import * as utils from "../utils";
 import progress from "../progress";
 import logger from "../logger";
-import { FILE_TIMEOUT } from "..";
+import { FILE_TIMEOUT } from "../index";
+import Directus from "../directus";
 
-import { ArticleData } from "./article";
+const MB = 1024 * 1024;
 
-abstract class DrupalImage {
-  protected _drupalName: string | null = null;
-  protected _directusName: string | null = null;
-  protected _ext: string | null = null;
+function isBase64(srcUri): boolean {
+  return !!srcUri.match(/.*data:image.*/);
+}
 
+export abstract class DrupalImage {
   protected _srcUri: string;
   protected _articlePath: string;
+
+  protected abstract _ext;
+
+  public abstract logName;
+  public abstract fileName: string | Promise<string>;
+  public abstract data:
+    | Buffer
+    | NodeJS.ReadableStream
+    | Promise<NodeJS.ReadableStream>;
+  public directusUri: Promise<string>;
+  public imageID: Promise<number>;
 
   constructor(srcUri: string, relativePath: string) {
     this._srcUri = srcUri;
     this._articlePath = relativePath;
+    this.directusUri = this.upload().then(res => res.directusUri);
+    this.imageID = this.upload().then(res => res.imageID);
   }
 
-  get isBase64(): boolean {
-    return !!this._srcUri.match(/.*data:image.*/);
+  private async upload(): Promise<{
+    directusUri: string;
+    imageID: number;
+  }> {
+    progress.incFilesBar();
+
+    // TODO: Check for repeats
+    // if (files.includes(logName)) {
+    //   logger.warn(`Already tried to process ${this.logName}`);
+    // }
+    // files.push(this.logName);
+    // filesLeft.push(this.logName);
+    const res = await retry<{
+      directusUri: string;
+      imageID: number;
+    }>(
+      async () => {
+        const data = await this.data;
+        if (!data) {
+          return null;
+        }
+
+        const uploadResults = await Directus.uploadImage(this).catch(err => {
+          logger.warn(`Retrying upload for ${this.logName}`);
+          logger.warn(err);
+          throw err;
+        });
+        return uploadResults;
+      },
+      { throw_original: true }
+    ).catch(err => {
+      logger.error(`Coundn't transfer file ${this.logName}`);
+      logger.error(err);
+      throw err;
+    });
+    // .then(response => {
+    //   const index = filesLeft.indexOf(this.logName);
+
+    //   if (index > -1) {
+    //    filesLeft.splice(index, 1);
+    //   }
+
+    //   progress.incFilesBar();
+
+    //   return response;
+    // })
+    // .finally(() => {
+    //   if (filesLeft.length < 5) {
+    //     logger.debug(`LEFT: ${filesLeft}`);
+    //   }
+    // });
+    return res;
   }
-
-  get mimeType(): string {
-    return `image/${this._ext}`;
-  }
-
-  abstract get logName(): string;
-  abstract get uploadName(): string;
-
-  abstract get data(): Buffer | IncomingMessage;
 }
 
 class Base64DrupalImage extends DrupalImage {
   private _i: number;
-  _directusName: string;
-  private _buffer: Buffer;
+  protected _ext: string;
+
+  public logName: string;
+  public fileName: string;
+  public data: Buffer | NodeJS.ReadableStream;
 
   constructor(srcUri: string, relativePath: string, i: number) {
     super(srcUri, relativePath);
@@ -50,91 +111,47 @@ class Base64DrupalImage extends DrupalImage {
     [, base64src] = base64src.split(",");
     [, fileMimeType] = fileMimeType.split(":");
     [, this._ext] = fileMimeType.split("/");
-    this._buffer = Buffer.from(base64src, "base64");
-    this._directusName = `${utils
+    this.data = Buffer.from(base64src, "base64");
+
+    this.fileName = `${utils
       .sanitizePath(this._articlePath)
       .slice(0, 15)}-inline-image-${this._i}.${this._ext}`;
-  }
-
-  get logName(): string {
-    return this._directusName;
-  }
-
-  get uploadName(): string {
-    return this._directusName;
-  }
-
-  get data(): Buffer {
-    return this._buffer;
+    if (this._ext === "gif") {
+      this.data = sharp(this.data).png();
+      logger.info(`Converting ${this.fileName} from gif to png`);
+    }
+    this.fileName.replace("gif", "png");
+    this.logName = this.fileName;
   }
 }
 
 class FileDrupalImage extends DrupalImage {
-  _drupalName: string;
-  _request: IncomingMessage | null = null;
+  protected _ext: Promise<string>;
+  private _fullSrcUri: Promise<string>;
+
+  public logName: string;
+  public fileName: Promise<string>;
+  public data: Promise<NodeJS.ReadableStream>;
 
   constructor(srcUri: string, relativePath: string) {
     super(srcUri, relativePath);
-    this._drupalName = utils.getFileNameFromUri(this._srcUri);
-  }
-
-  get logName(): string {
-    return this._drupalName;
-  }
-
-  get uploadName(): string {
-    if (!this._directusName)
-      throw new Error("Image has not yet been initialized");
-    return this._directusName;
-  }
-
-  get data(): IncomingMessage {
-    if (!this._request) throw new Error("Image has not yet been fetched");
-    return this._request;
-  }
-
-  public async init(): Promise<void> {
-    let fullUri: string | null;
-    if (this._srcUri.match(/^public:\/\/.*/)) {
-      fullUri = await this.genFirstValidUri();
-    } else {
-      fullUri = this._srcUri;
-    }
-
-    await this.setDirectusName(fullUri);
-    await this.downloadImage(fullUri).catch(err => {
-      logger.warn(`Download function failed for ${fullUri}`);
+    this.logName = utils.getFileNameFromUri(srcUri);
+    this._fullSrcUri = this.getSrcUri();
+    this.fileName = this.getFileName().then(res => res.fileName);
+    this._ext = this.getFileName().then(res => res.ext);
+    this.data = this.download().catch(err => {
+      logger.warn(`Retrying download for ${this.logName}`);
       logger.warn(err);
       throw err;
     });
   }
 
-  async downloadImage(fullUri: string): Promise<void> {
-    const options: AxiosRequestConfig = {
-      responseType: "stream",
-      timeout: FILE_TIMEOUT,
-    };
-
-    logger.debug(`Trying to download ${this.logName}`);
-
-    const reqStream: IncomingMessage = await axios.get(fullUri, options).then(
-      res => res.data,
-      e => {
-        logger.warn(`Failed download: ${fullUri}`);
-        logger.warn(e);
-        throw e;
-      }
-    );
-
-    reqStream
-      .on("error", () => {
-        logger.warn(`Error on download for ${this.logName}`);
-      })
-      .on("close", () => {
-        logger.debug(`Download ended for ${this.logName}`);
-      });
-
-    this._request = reqStream;
+  private getSrcUri(): Promise<string> {
+    if (this._srcUri.match(/^public:\/\/.*/)) {
+      return this.genFirstValidUri();
+    } else {
+      return Promise.resolve(this._srcUri);
+    }
   }
 
   private static getHostedImageUris(hostedUri: string): Array<string> {
@@ -150,37 +167,6 @@ class FileDrupalImage extends DrupalImage {
     ];
   }
 
-  private async setDirectusName(fullUri: string): Promise<void> {
-    const fileName: string = utils.getFileNameFromUri(fullUri);
-    const fileNameSan: string = fileName.replace(/[^0-9a-zA-Z-._]/g, "");
-    const parts = fileNameSan.split(".");
-    let ext: string | null = null;
-
-    if (parts.length > 1) {
-      ext = parts.pop() as string;
-      if (/jp(e)?g/i.test(ext)) ext = "jpg";
-      if (ext !== "png") ext = null;
-    }
-    if (ext === null) {
-      // logger.debug(`Getting headers for ${fileName}`);
-      const headers = await axios.head(fullUri).then(
-        res => res.headers,
-        err => {
-          // logger.warn(`Error getting headers for ${fullUri}`);
-          // logger.warn(err);
-          throw err;
-        }
-      );
-      const [, extension] = headers["content-type"]?.split("/");
-      ext = extension as string;
-    }
-    this._ext = ext;
-    this._directusName = `${parts
-      .join(".")
-      .slice(0, 40)
-      .replace(/^-|-$/g, "")}.${ext}`;
-  }
-
   private async genFirstValidUri(): Promise<string> {
     const uris = FileDrupalImage.getHostedImageUris(this._srcUri);
     let fullUri: string | null = null;
@@ -193,7 +179,7 @@ class FileDrupalImage extends DrupalImage {
           fullUri = uri;
           return res.headers;
         },
-        err => {
+        () => {
           // logger.debug(`Test for ${uri} failed`);
           // logger.debug(err);
           return false;
@@ -207,85 +193,105 @@ class FileDrupalImage extends DrupalImage {
 
     return fullUri;
   }
+
+  private async getFileName(): Promise<{ fileName: string; ext: string }> {
+    const fileName: string = this.logName.replace(/[^0-9a-zA-Z-._]/g, "");
+    const parts = fileName.split(".");
+    let ext: string | null = null;
+
+    if (parts.length > 1) {
+      ext = parts.pop() as string;
+      if (/jp(e)?g/i.test(ext)) ext = "jpg";
+      if (ext !== "png") ext = null;
+    }
+    if (ext === null) {
+      // logger.debug(`Getting headers for ${this.logName}`);
+      const headers = await axios.head(await this._fullSrcUri).then(
+        res => res.headers,
+        err => {
+          // logger.warn(`Error getting headers for ${this.logName}`);
+          // logger.warn(err);
+          throw err;
+        }
+      );
+      const [, extension] = headers["content-type"]?.split("/");
+      ext = extension as string;
+    }
+    return {
+      fileName: `${parts
+        .join(".")
+        .slice(0, 40)
+        .replace(/^-|-$/g, "")}.${ext}`,
+      ext,
+    };
+  }
+
+  private async download(): Promise<NodeJS.ReadableStream> {
+    const options: AxiosRequestConfig = {
+      responseType: "stream",
+      timeout: FILE_TIMEOUT,
+    };
+
+    logger.debug(`Trying to download ${this.logName}`);
+
+    const reqStream: IncomingMessage = await axios
+      .get(await this._fullSrcUri, options)
+      .then(
+        res => res.data,
+        e => {
+          logger.warn(`Failed download: ${this.logName}`);
+          logger.warn(e);
+          throw e;
+        }
+      );
+
+    reqStream
+      .on("error", () => {
+        logger.warn(`Error on download for ${this.logName}`);
+      })
+      .on("close", () => {
+        logger.debug(`Download ended for ${this.logName}`);
+      });
+
+    let data: NodeJS.ReadableStream = reqStream;
+
+    if ((await this._ext) === "gif") {
+      const transformer = sharp().png();
+      data = reqStream.pipe(transformer);
+
+      logger.info(`Converting ${this.logName} from gif to png`);
+      this.fileName = this.fileName.then(fileName =>
+        fileName.replace(".gif", ".png")
+      );
+    }
+    if (
+      reqStream.headers["content-length"] &&
+      parseInt(reqStream.headers["content-length"], 10) > 5 * MB
+    ) {
+      const transformer = sharp().resize(1000);
+      data = reqStream.pipe(transformer);
+      logger.info(
+        `Resizing ${this.logName} from ${reqStream.headers["content-length"]}`
+      );
+    }
+
+    return data;
+  }
 }
 
-// async drupalToDirectusImage(
-//   srcUri: string,
-//   articleRelativePath: string
-// ): Promise<{ fullUri: string; imageID: number } | null> {
-//   this.drupal.increaseFilesBarTotal();
-
-//   // TODO: fetch file name first, then go through this process
-//   // may seem counterintuitive but for logging purposes i think it's the right move
-//   // esp. because there may be generic repeats (unnamed-1, etc)
-//   const logName = utils.getFileNameFromUri(srcUri);
-
-//   if (this.drupal.files.includes(logName)) {
-//     this.drupal.logger.warn(`Already tried to process ${logName}`);
-//   }
-//   this.drupal.files.push(logName);
-//   this.drupal.filesLeft.push(logName);
-//   const res:
-//     | UploadFileFnReturnType
-//     | Error
-//     | null = await retry<UploadFileFnReturnType | null>(
-//     async () => {
-//       const data = await this.genDataFromSrc(
-//         srcUri,
-//         articleRelativePath
-//       ).catch(err => {
-//         this.drupal.logger.warn(`Retrying download for ${logName}`);
-//         this.drupal.logger.warn(err);
-//         throw err;
-//       });
-//       if (!data) {
-//         return null;
-//       }
-//       const { fileData, fileName, fileMimeType } = data;
-
-//       const uploadResults: UploadFileFnReturnType = await (this.drupal
-//         .uploadFileFn as UploadFileFn)(
-//         fileData,
-//         fileName,
-//         fileMimeType
-//       ).catch(err => {
-//         this.drupal.logger.warn(`Retrying upload for ${logName}`);
-//         this.drupal.logger.warn(err);
-//         throw err;
-//       });
-//       return uploadResults;
-//     },
-//     { throw_original: true }
-//   )
-//     .catch(
-//       (err): Error => {
-//         this.drupal.logger.error(`Coundn't transfer file ${logName}`);
-//         this.drupal.logger.error(err);
-//         throw err;
-//       }
-//     )
-//     .then(response => {
-//       const index = this.drupal.filesLeft.indexOf(logName);
-
-//       if (index > -1) {
-//         this.drupal.filesLeft.splice(index, 1);
-//       }
-
-//       this.drupal.incrementFilesBar(1);
-
-//       return response;
-//     })
-//     .finally(() => {
-//       if (this.drupal.filesLeft.length < 5) {
-//         this.drupal.logger.debug(`LEFT: ${this.drupal.filesLeft}`);
-//       }
-//     });
-//   if (res === null || res instanceof Error) return null;
-//   return { fullUri: res.fullUri, imageID: res.imageID };
-// }
-
-// async function newImage(srcUri: string, relativePath: string, i?: number) {
-//   return await new DrupalImage(srcUri, relativePath, i).init();
-// }
-
-// export default { newImage };
+export function newImage(
+  srcUri: string,
+  relativePath: string,
+  i?: number
+): DrupalImage {
+  if (isBase64(srcUri)) {
+    if (i == null) {
+      const err = `Must include index for base64 images; Article ${relativePath}`;
+      logger.error(err);
+      throw new Error(err);
+    }
+    return new Base64DrupalImage(srcUri, relativePath, i);
+  } else {
+    return new FileDrupalImage(srcUri, relativePath);
+  }
+}

@@ -36,7 +36,7 @@ class ProgressBar {
     this._articlesProgressBar.setTotal(total);
   }
 
-  incFilesBar(delta: number): void {
+  incFilesBar(delta = 1): void {
     this._filesProgressBar.increment(delta);
   }
 
