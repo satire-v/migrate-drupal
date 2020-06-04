@@ -12,7 +12,7 @@ const defaultFormat = format.combine(
     info.level = info.level.toUpperCase();
     return `[${info.timestamp}] ${info.ms
       .replace(/[ms]/gi, "")
-      .padStart(6, " ")}ms ${info.level}: ${info.message} ${
+      .padStart(6, " ")}ms ${info.level}: ${util.format(info.message)} ${
       info.durationMs ? `${info.durationMs}ms` : ""
     }${info.stack ? `\n${util.format(info.stack)}\n` : ""} `;
   })

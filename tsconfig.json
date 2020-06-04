@@ -12,7 +12,7 @@
     "strictPropertyInitialization": true,
     "sourceMap": true,
     "downlevelIteration": true,
-    "listEmittedFiles": true,
+    "listEmittedFiles": false,
     "skipLibCheck": true,
     "allowJs": true,
     "checkJs": false,
