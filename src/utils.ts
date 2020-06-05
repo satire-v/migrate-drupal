@@ -1,3 +1,5 @@
+import logger from "./logger";
+
 export function sanitizePath(uri: string): string {
   return uri.replace(/[^0-9a-zA-Z-_]/g, "");
 }
@@ -14,4 +16,21 @@ export function unixToSQLDate(unixts: number): string {
     .toISOString()
     .slice(0, 19)
     .replace("T", " ");
+}
+
+export function handleShellReturn(returns: {
+  stderr: string;
+  [key: string]: any;
+}): void {
+  const err = returns.stderr;
+  if (
+    err === "" ||
+    err ===
+      "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+  ) {
+    return;
+  } else {
+    logger.error(err);
+    throw new Error(err);
+  }
 }

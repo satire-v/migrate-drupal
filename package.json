@@ -10,10 +10,11 @@
     "try": "npm run build && node ./lib/index.js",
     "debug": "npm run build && node --inspect-brk ./lib/index.js",
     "go": "node ./lib/parse.js",
-    "transfer": "npm run build && node ./lib/transfer.js"
+    "transfer": "npm run build && node --inspect-brk ./lib/transfer.js"
   },
   "dependencies": {
     "@directus/sdk-js": "^6.0.5",
+    "@types/inquirer": "^6.5.0",
     "@types/prompt-sync": "^4.1.0",
     "@types/ssh2": "^0.5.43",
     "axios": "^0.19.2",
@@ -23,6 +24,7 @@
     "cheerio": "^1.0.0-rc.3",
     "cli-progress": "^3.6.0",
     "form-data": "^3.0.0",
+    "inquirer": "^7.1.0",
     "mysql2": "^2.1.0",
     "needle": "^2.3.3",
     "node-ssh": "^10.0.2",
@@ -36,7 +38,6 @@
     "sharp": "^0.25.2",
     "slug": "^1.1.0",
     "ssh2": "^0.8.9",
-    "ssh2-promise": "^0.1.7",
     "typescript": "^3.8.3",
     "winston": "^3.2.1",
     "wtfnode": "^0.8.1",

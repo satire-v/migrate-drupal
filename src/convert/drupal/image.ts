@@ -6,11 +6,10 @@ import sharp from "sharp";
 import Bluebird from "bluebird";
 import axios, { AxiosRequestConfig } from "axios";
 
-import * as utils from "../utils";
-import progress from "../progress";
-import logger from "../logger";
 import { FILE_TIMEOUT } from "../index";
-
+import * as utils from "../../utils";
+import progress from "../../progress";
+import logger from "../../logger";
 const MB = 1024 * 1024;
 
 export abstract class DrupalImage {

@@ -9,9 +9,10 @@ import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
-import * as utils from "./utils";
-import progress from "./progress";
-import logger from "./logger";
+import * as utils from "../utils";
+import progress from "../progress";
+import logger from "../logger";
+
 import { DrupalImage } from "./drupal/image";
 import DrupalArticle, { CategoryMap } from "./drupal/article";
 

@@ -3,9 +3,9 @@ import { RowDataPacket, FieldPacket } from "mysql2/promise";
 import cheerio from "cheerio";
 import Bluebird from "bluebird";
 
-import logger from "../logger";
 import directus from "../directus";
 import DB from "../database";
+import logger from "../../logger";
 
 import { newImage } from "./image";
 
