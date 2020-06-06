@@ -1,9 +1,25 @@
 import cliProgress, { SingleBar, MultiBar } from "cli-progress";
 
 class ProgressBar {
-  private _articlesProgressBar: SingleBar;
-  private _filesProgressBar: SingleBar;
+  private __articlesProgressBar: SingleBar | null = null;
+  private __filesProgressBar: SingleBar | null = null;
   private _multibar: MultiBar;
+
+  private get _articlesProgressBar(): SingleBar {
+    if (this.__articlesProgressBar) {
+      return this.__articlesProgressBar;
+    }
+    this.start();
+    return this.__articlesProgressBar!;
+  }
+
+  private get _filesProgressBar(): SingleBar {
+    if (this.__filesProgressBar) {
+      return this.__filesProgressBar;
+    }
+    this.start();
+    return this.__filesProgressBar!;
+  }
 
   constructor() {
     this._multibar = new cliProgress.MultiBar({
@@ -15,11 +31,14 @@ class ProgressBar {
       forceRedraw: false,
       hideCursor: true,
     });
-    this._articlesProgressBar = this._multibar.create(0, 0, {
+  }
+
+  public start(): void {
+    this.__articlesProgressBar = this._multibar.create(0, 0, {
       message: "Articles",
     });
 
-    this._filesProgressBar = this._multibar.create(0, 0, {
+    this.__filesProgressBar = this._multibar.create(0, 0, {
       message: "Files",
     });
   }

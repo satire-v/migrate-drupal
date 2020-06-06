@@ -1,16 +1,15 @@
 {
   "name": "miragtion-satirev",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Migrate Satire V Site to Directus",
-  "main": "src/parse.js",
+  "main": "lib/index.js",
   "scripts": {
+    "start": "func() { npm run build && npm run ${1:-run} ./lib/${2:-index}; }; func",
     "build": "tsc",
-    "test": "npm run build && node ./lib/test.js",
-    "debugtest": "npm run build && node --inspect-brk ./lib/test.js",
-    "try": "npm run build && node ./lib/index.js",
-    "debug": "npm run build && node --inspect-brk ./lib/index.js",
-    "go": "node ./lib/parse.js",
-    "transfer": "npm run build && node --inspect-brk ./lib/transfer.js"
+    "debug": "node --inspect-brk",
+    "run": "node",
+    "test": "./lib/test.js",
+    "main": "./lib/index.js"
   },
   "dependencies": {
     "@directus/sdk-js": "^6.0.5",

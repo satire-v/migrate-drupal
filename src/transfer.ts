@@ -15,6 +15,7 @@ import {
 } from "./index";
 
 export async function exportFromDrupal(drpualPwd: string): Promise<void> {
+  logger.info("EXPORT FROM DRUPAL\n");
   const ssh = new SSH();
   logger.info("Attempting to connect to Drupal server...");
 
@@ -60,12 +61,15 @@ export async function exportFromDrupal(drpualPwd: string): Promise<void> {
   logger.info("Database copied to local directory...");
 
   ssh.dispose();
+  logger.info("DONE EXPORTING FROM DRUPAL\n");
 }
 
 export async function importToLocal(
   rootPwd: string,
   mysqlPwd: string
 ): Promise<void> {
+  logger.info("IMPORT TO LOCAL\n");
+
   logger.info("Attempting to start locally running MySQL server as root...");
 
   if (
@@ -97,9 +101,12 @@ export async function importToLocal(
   utils.handleShellReturn(returns);
 
   logger.info("Drupal database imported locally...");
+  logger.info("DONE IMPORTING TO LOCAL\n");
 }
 
 export async function importToDirectus(directusPwd: string): Promise<void> {
+  logger.info("IMPORT TO DIRECTUS\n");
+
   logger.info("Copying import to server...");
 
   const ssh = new SSH();
@@ -113,4 +120,5 @@ export async function importToDirectus(directusPwd: string): Promise<void> {
     `mysql -p${directusPwd} -h localhost -u satirev ${DIRECTUS_DATABASE} < ${DIRECTUS_IMPORT_FILE}`
   );
   utils.handleShellReturn(returns);
+  logger.info("DONE IMPORTING TO DIRECTUS\n");
 }

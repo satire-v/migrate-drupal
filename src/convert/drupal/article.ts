@@ -35,7 +35,7 @@ class Article {
   private static _categoriesQuery =
     "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
 
-  public static categoryMap: Promise<CategoryMap> = Article.getCategoryMap();
+  public static categoryMap: CategoryMap;
   private static db: Pool;
 
   private _i: number;
@@ -80,11 +80,12 @@ class Article {
     }
   }
 
-  public static setDB(db: Pool): void {
+  public static async Init(db: Pool): Promise<void> {
     Article.db = db;
+    Article.categoryMap = await Article.setCategoryMap();
   }
 
-  private static async getCategoryMap(): Promise<CategoryMap> {
+  public static async setCategoryMap(): Promise<CategoryMap> {
     interface CategoryEntry extends RowDataPacket {
       name: string;
       tid: number;
@@ -248,10 +249,7 @@ class Article {
 
 export type DrupalArticle = InstanceType<typeof Article>;
 
-export default class Drupal {
-  public Article = Article;
-
-  constructor(db: Pool) {
-    Article.setDB(db);
-  }
+export async function initArticle(db: Pool): Promise<typeof Article> {
+  await Article.Init(db);
+  return Article;
 }

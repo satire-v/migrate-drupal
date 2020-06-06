@@ -121,13 +121,13 @@ const commands = [
   },
 ];
 
-commands.forEach(command => {
-  yargs.command(command.aliases, command.desc, command.args);
-});
-
-const { argv } = yargs.help().alias("help", "h");
-
 async function main(): Promise<void> {
+  commands.forEach(command => {
+    yargs.command(command.aliases, command.desc, command.args);
+  });
+
+  const { argv } = yargs.help().alias("help", "h");
+
   const answers = await inquirer.prompt([
     {
       name: "command",

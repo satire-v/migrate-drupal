@@ -4,9 +4,10 @@ import mysql2, { Pool } from "mysql2/promise";
 import Bluebird from "bluebird";
 
 import progress from "../progress";
-import { DRUPAL_DATABASE } from "../index";
+import logger from "../logger";
+import { DRUPAL_DATABASE, DIRECTUS_IMPORT_FILE } from "../index";
 
-import Drupal, { ArticleData } from "./drupal/article";
+import { initArticle, ArticleData } from "./drupal/article";
 import directus from "./directus";
 
 export const FILE_TIMEOUT = 15000;
@@ -26,10 +27,11 @@ export async function convert(
   concurrency: number,
   mysqlPwd: string
 ): Promise<void> {
+  logger.info("CONVERT");
   const db = pool(mysqlPwd);
-  const drupal = new Drupal(db);
+  const Article = await initArticle(db);
   await directus.deleteImages();
-  const articles: Array<ArticleData> = await drupal.Article.genAllArticles(
+  const articles: Array<ArticleData> = await Article.genAllArticles(
     articleCount
   );
   progress.ArticlesBarTotal = articleCount || articles.length;
@@ -37,19 +39,17 @@ export async function convert(
   const articlesProcessed = await Bluebird.map(
     articles,
     async article => {
-      const Article = new drupal.Article(article);
-      return await directus.createArticleImportQuery(Article);
+      const ArticleInstance = new Article(article);
+      return await directus.createArticleImportQuery(ArticleInstance);
     },
     { concurrency }
   );
 
   const deleteArticles = "DELETE FROM articles;\n";
-  const categoryQuery = directus.categoriesImport(
-    await drupal.Article.categoryMap
-  );
+  const categoryQuery = directus.categoriesImport(Article.categoryMap);
 
   fs.writeFile(
-    "import.sql",
+    DIRECTUS_IMPORT_FILE,
     `${(await categoryQuery) +
       deleteArticles +
       directus.insertArticleStart +
@@ -67,4 +67,5 @@ export async function convert(
 
   progress.stop();
   await db.end();
+  logger.info("DONE CONVERTING");
 }
