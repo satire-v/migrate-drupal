@@ -1,56 +1,70 @@
 import fs from "fs";
 
+import mysql2, { Pool } from "mysql2/promise";
 import Bluebird from "bluebird";
 
 import progress from "../progress";
-import args from "../args";
+import { DRUPAL_DATABASE } from "../index";
 
-import DrupalArticle, { ArticleData } from "./drupal/article";
+import Drupal, { ArticleData } from "./drupal/article";
 import directus from "./directus";
-import DB from "./database";
 
 export const FILE_TIMEOUT = 15000;
 
-// async function main(): Promise<void> {
-//   await directus.deleteImages();
-//   const articles: Array<ArticleData> = await DrupalArticle.genAllArticles(
-//     args.articleCount
-//   );
-//   progress.ArticlesBarTotal = args.articleCount || articles.length;
+function pool(mysqlPwd: string): Pool {
+  return mysql2.createPool({
+    host: "localhost",
+    user: "root",
+    database: DRUPAL_DATABASE,
+    password: mysqlPwd,
+    connectionLimit: 10,
+  });
+}
 
-//   const articlesProcessed = await Bluebird.map(
-//     articles,
-//     async article => {
-//       const Article = new DrupalArticle(article);
-//       return await directus.createArticleImportQuery(Article);
-//     },
-//     { concurrency: args.concurrency }
-//   );
+export async function convert(
+  articleCount: number,
+  concurrency: number,
+  mysqlPwd: string
+): Promise<void> {
+  const db = pool(mysqlPwd);
+  const drupal = new Drupal(db);
+  await directus.deleteImages();
+  const articles: Array<ArticleData> = await drupal.Article.genAllArticles(
+    articleCount
+  );
+  progress.ArticlesBarTotal = articleCount || articles.length;
 
-//   const deleteArticles = "DELETE FROM articles;\n";
-//   const categoryQuery = directus.categoriesImport(
-//     await DrupalArticle.categoryMap
-//   );
+  const articlesProcessed = await Bluebird.map(
+    articles,
+    async article => {
+      const Article = new drupal.Article(article);
+      return await directus.createArticleImportQuery(Article);
+    },
+    { concurrency }
+  );
 
-//   fs.writeFile(
-//     "import.sql",
-//     `${(await categoryQuery) +
-//       deleteArticles +
-//       directus.insertArticleStart +
-//       articlesProcessed.join(",")};`,
-//     err => {
-//       if (err) throw err;
-//     }
-//   );
-//   // const sentFiles = (await directus.sdk.getFiles({
-//   //   limit: -1,
-//   //   fields: "filename_download",
-//   // })) as any;
+  const deleteArticles = "DELETE FROM articles;\n";
+  const categoryQuery = directus.categoriesImport(
+    await drupal.Article.categoryMap
+  );
 
-//   // const sentFilesSet = new Set(sentFiles.data.map(e => e.filename_download));
+  fs.writeFile(
+    "import.sql",
+    `${(await categoryQuery) +
+      deleteArticles +
+      directus.insertArticleStart +
+      articlesProcessed.join(",")};`,
+    err => {
+      if (err) throw err;
+    }
+  );
+  // const sentFiles = (await directus.sdk.getFiles({
+  //   limit: -1,
+  //   fields: "filename_download",
+  // })) as any;
 
-//   progress.stop();
-//   await DB.end();
-// }
+  // const sentFilesSet = new Set(sentFiles.data.map(e => e.filename_download));
 
-// main();
+  progress.stop();
+  await db.end();
+}

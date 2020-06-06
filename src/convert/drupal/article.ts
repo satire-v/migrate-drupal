@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/camelcase */
 import { RowDataPacket, FieldPacket } from "mysql2/promise";
+import { Pool } from "mysql2/promise";
 import cheerio from "cheerio";
 import Bluebird from "bluebird";
 
 import directus from "../directus";
-import DB from "../database";
 import logger from "../../logger";
 
 import { newImage } from "./image";
@@ -31,11 +31,12 @@ export interface ArticleData {
   tags_info: string;
 }
 
-export default class Article {
+class Article {
   private static _categoriesQuery =
     "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
 
   public static categoryMap: Promise<CategoryMap> = Article.getCategoryMap();
+  private static db: Pool;
 
   private _i: number;
 
@@ -79,12 +80,16 @@ export default class Article {
     }
   }
 
+  public static setDB(db: Pool): void {
+    Article.db = db;
+  }
+
   private static async getCategoryMap(): Promise<CategoryMap> {
     interface CategoryEntry extends RowDataPacket {
       name: string;
       tid: number;
     }
-    const res = (await DB.query(Article._categoriesQuery)) as [
+    const res = (await Article.db.query(Article._categoriesQuery)) as [
       CategoryEntry[],
       FieldPacket[]
     ];
@@ -148,7 +153,7 @@ export default class Article {
   }
 
   public static async genAllArticles(limit?: number): Promise<ArticleData[]> {
-    const res = (await DB.query(Article.allArticlesQuery(limit))) as [
+    const res = (await Article.db.query(Article.allArticlesQuery(limit))) as [
       RowDataPacket[],
       FieldPacket[]
     ];
@@ -176,10 +181,11 @@ export default class Article {
 
   private async genManagedFileHTMLTag(fileObj: object): Promise<string> {
     const fid = this.findFID(fileObj);
-    const [nodes] = await DB.query(
-      "SELECT uri FROM file_managed WHERE fid = ?",
-      [fid]
-    );
+    const [
+      nodes,
+    ] = await Article.db.query("SELECT uri FROM file_managed WHERE fid = ?", [
+      fid,
+    ]);
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
   }
 
@@ -237,5 +243,15 @@ export default class Article {
       return (await Article.categoryMap)["Everything Else"];
     }
     return category_id;
+  }
+}
+
+export type DrupalArticle = InstanceType<typeof Article>;
+
+export default class Drupal {
+  public Article = Article;
+
+  constructor(db: Pool) {
+    Article.setDB(db);
   }
 }

@@ -4,7 +4,6 @@ import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
 
 import logger from "./logger";
-import DB from "./convert/database";
 
 const test = (): void => {
   const dirOptions = {
