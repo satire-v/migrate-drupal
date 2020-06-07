@@ -30,7 +30,7 @@ enum Commands {
 
 type Command = keyof typeof Commands;
 
-const co: any = {};
+const co: Record<string, string[]> = {};
 co["import"] = ["drupal_pwd", "root_pwd"];
 co["convert"] = ["article_count", "concurrency", "mysql_pwd"];
 co["export"] = ["directus_pwd"];
@@ -52,7 +52,7 @@ const optionCommands: Record<Option, Command[]> = Object.keys(Options).reduce(
 interface MyOptionParams
   extends Pick<OptionParams, "alias" | "default" | "description" | "type"> {
   alias: string | ReadonlyArray<string>;
-  default: any;
+  default: unknown;
   description: string;
   type: "array" | "count" | PositionalOptionsType;
 }

@@ -15,7 +15,7 @@ const MB = 1024 * 1024;
 export abstract class DrupalImage {
   public static filesTotal = 0;
   public static files: string[] = [];
-  public static filesLeft: string[] = []; //Go on Image as static?
+  public static filesLeft: string[] = [];
   private _id: number;
 
   protected _srcUri: string;

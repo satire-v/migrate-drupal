@@ -14,17 +14,19 @@ import progress from "../progress";
 import logger from "../logger";
 
 import { DrupalImage } from "./drupal/image";
-import type { DrupalArticle, CategoryMap } from "./drupal/article";
+import type { Article, CategoryMap } from "./drupal/article";
+
+export const sdk = new SDK({
+  mode: "cookie" as AuthModes,
+  url: "http://api.satirev.org/",
+  project: "satire-v",
+  token: "letmeinyoubitch",
+});
 
 // Directus main class
 class Directus {
   // SDK handles concurrency issues, so we only want to use one instance
-  private sdk: SDK = new SDK({
-    mode: "cookie" as AuthModes,
-    url: "http://api.satirev.org/",
-    project: "satire-v",
-    token: "letmeinyoubitch",
-  });
+  private sdk: SDK = sdk;
 
   constructor() {}
 
@@ -139,7 +141,7 @@ class Directus {
 
   /* The big one. Creates the SQL query to insert an article, all of the fields */
   public async createArticleImportQuery(
-    article: DrupalArticle
+    article: Article
   ): Promise<string> {
     // Drupal stores as binary 1/0
     const pub = article.status ? "published" : "draft";

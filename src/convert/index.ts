@@ -7,7 +7,7 @@ import progress from "../progress";
 import logger from "../logger";
 import { DRUPAL_DATABASE, DIRECTUS_IMPORT_FILE } from "../index";
 
-import { initArticle, ArticleData } from "./drupal/article";
+import { Article, ArticleData } from "./drupal/article";
 import directus from "./directus";
 
 export const FILE_TIMEOUT = 15000;
@@ -29,9 +29,10 @@ export async function convert(
 ): Promise<void> {
   logger.info("CONVERT");
   const db = pool(mysqlPwd);
-  const Article = await initArticle(db);
   await directus.deleteImages();
+  const categoryMap = await Article.getCategoryMap(db);
   const articles: Array<ArticleData> = await Article.genAllArticles(
+    db,
     articleCount
   );
   progress.ArticlesBarTotal = articleCount || articles.length;
@@ -39,14 +40,14 @@ export async function convert(
   const articlesProcessed = await Bluebird.map(
     articles,
     async article => {
-      const ArticleInstance = new Article(article);
+      const ArticleInstance = new Article(article, db, categoryMap);
       return await directus.createArticleImportQuery(ArticleInstance);
     },
     { concurrency }
   );
 
   const deleteArticles = "DELETE FROM articles;\n";
-  const categoryQuery = directus.categoriesImport(Article.categoryMap);
+  const categoryQuery = directus.categoriesImport(categoryMap);
 
   fs.writeFile(
     DIRECTUS_IMPORT_FILE,
@@ -58,12 +59,6 @@ export async function convert(
       if (err) throw err;
     }
   );
-  // const sentFiles = (await directus.sdk.getFiles({
-  //   limit: -1,
-  //   fields: "filename_download",
-  // })) as any;
-
-  // const sentFilesSet = new Set(sentFiles.data.map(e => e.filename_download));
 
   progress.stop();
   await db.end();

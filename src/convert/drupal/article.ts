@@ -31,12 +31,12 @@ export interface ArticleData {
   tags_info: string;
 }
 
-class Article {
+export class Article {
   private static _categoriesQuery =
     "SELECT term.name, term.tid FROM taxonomy_term_data term INNER JOIN taxonomy_vocabulary vocab ON term.vid = vocab.vid WHERE vocab.machine_name = 'categories'";
 
-  public static categoryMap: CategoryMap;
-  private static db: Pool;
+  private categoryMap: CategoryMap;
+  private db: Pool;
 
   private _i: number;
 
@@ -52,8 +52,10 @@ class Article {
   public relative_path: string;
   public tags_info: string;
 
-  constructor(article: ArticleData) {
+  constructor(article: ArticleData, db: Pool, categoryMap: CategoryMap) {
     this._i = 0;
+    this.db = db;
+    this.categoryMap = categoryMap;
     const {
       category_name,
       category_id,
@@ -80,17 +82,12 @@ class Article {
     }
   }
 
-  public static async Init(db: Pool): Promise<void> {
-    Article.db = db;
-    Article.categoryMap = await Article.setCategoryMap();
-  }
-
-  public static async setCategoryMap(): Promise<CategoryMap> {
+  public static async getCategoryMap(db: Pool): Promise<CategoryMap> {
     interface CategoryEntry extends RowDataPacket {
       name: string;
       tid: number;
     }
-    const res = (await Article.db.query(Article._categoriesQuery)) as [
+    const res = (await db.query(Article._categoriesQuery)) as [
       CategoryEntry[],
       FieldPacket[]
     ];
@@ -153,8 +150,11 @@ class Article {
       ORDER BY n.created DESC ${limit ? `LIMIT ${limit}` : ""}`;
   }
 
-  public static async genAllArticles(limit?: number): Promise<ArticleData[]> {
-    const res = (await Article.db.query(Article.allArticlesQuery(limit))) as [
+  public static async genAllArticles(
+    db: Pool,
+    limit?: number
+  ): Promise<ArticleData[]> {
+    const res = (await db.query(Article.allArticlesQuery(limit))) as [
       RowDataPacket[],
       FieldPacket[]
     ];
@@ -184,7 +184,7 @@ class Article {
     const fid = this.findFID(fileObj);
     const [
       nodes,
-    ] = await Article.db.query("SELECT uri FROM file_managed WHERE fid = ?", [
+    ] = await this.db.query("SELECT uri FROM file_managed WHERE fid = ?", [
       fid,
     ]);
     return `<img src="${encodeURI(nodes[0].uri)}" />`;
@@ -241,15 +241,8 @@ class Article {
     category_name: string | null
   ): Promise<number> {
     if (!category_name || !category_id) {
-      return (await Article.categoryMap)["Everything Else"];
+      return this.categoryMap["Everything Else"];
     }
     return category_id;
   }
-}
-
-export type DrupalArticle = InstanceType<typeof Article>;
-
-export async function initArticle(db: Pool): Promise<typeof Article> {
-  await Article.Init(db);
-  return Article;
 }
