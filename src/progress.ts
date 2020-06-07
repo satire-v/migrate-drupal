@@ -1,24 +1,29 @@
 import cliProgress, { SingleBar, MultiBar } from "cli-progress";
 
 class ProgressBar {
-  private __articlesProgressBar: SingleBar | null = null;
-  private __filesProgressBar: SingleBar | null = null;
+  private _articlesProgressBar: SingleBar | null = null;
+  private _filesProgressBar: SingleBar | null = null;
   private _multibar: MultiBar;
 
-  private get _articlesProgressBar(): SingleBar {
-    if (this.__articlesProgressBar) {
-      return this.__articlesProgressBar;
+  private get articlesProgressBar(): SingleBar {
+    if (this._articlesProgressBar) {
+      return this._articlesProgressBar;
+    } else {
+      this._articlesProgressBar = this._multibar.create(0, 0, {
+        message: "Articles",
+      });
     }
-    this.start();
-    return this.__articlesProgressBar!;
+    return this._articlesProgressBar;
   }
 
-  private get _filesProgressBar(): SingleBar {
-    if (this.__filesProgressBar) {
-      return this.__filesProgressBar;
+  private get filesProgressBar(): SingleBar {
+    if (this._filesProgressBar) {
+      return this._filesProgressBar;
     }
-    this.start();
-    return this.__filesProgressBar!;
+    this._filesProgressBar = this._multibar.create(0, 0, {
+      message: "Files",
+    });
+    return this._filesProgressBar;
   }
 
   constructor() {
@@ -33,34 +38,24 @@ class ProgressBar {
     });
   }
 
-  public start(): void {
-    this.__articlesProgressBar = this._multibar.create(0, 0, {
-      message: "Articles",
-    });
-
-    this.__filesProgressBar = this._multibar.create(0, 0, {
-      message: "Files",
-    });
-  }
-
   public stop(): void {
     this._multibar.stop();
   }
 
   set FilesBarTotal(total: number) {
-    this._filesProgressBar.setTotal(total);
+    this.filesProgressBar.setTotal(total);
   }
 
   set ArticlesBarTotal(total: number) {
-    this._articlesProgressBar.setTotal(total);
+    this.articlesProgressBar.setTotal(total);
   }
 
   incFilesBar(delta = 1): void {
-    this._filesProgressBar.increment(delta);
+    this.filesProgressBar.increment(delta);
   }
 
   incArticlesBar(): void {
-    this._articlesProgressBar.increment();
+    this.articlesProgressBar.increment();
   }
 }
 

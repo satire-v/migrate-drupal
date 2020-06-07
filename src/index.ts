@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/camelcase */
-import yargs from "yargs";
-import inquirer from "inquirer";
+import yargs, { Options as OptionParams, PositionalOptionsType } from "yargs";
+import inquirer, { ChoiceOptions, DistinctQuestion, Answers } from "inquirer";
 
 import { exportFromDrupal, importToLocal, importToDirectus } from "./transfer";
 import { convert } from "./convert";
@@ -9,138 +9,194 @@ export const DRUPAL_DATABASE = "satirevdrupal";
 export const DIRECTUS_DATABASE = "satirev";
 export const DIRECTUS_IMPORT_FILE = "directus_import.sql";
 
-const options: Record<string, Record<string, Record<string, any>>> = {
-  articleCount: {
-    articleCount: {
-      alias: "n",
-      description: "Number of articles to write to import",
-      type: "number",
-      default: undefined,
-    },
+enum Options {
+  "article_count",
+  "concurrency",
+  "drupal_pwd",
+  "root_pwd",
+  "mysql_pwd",
+  "directus_pwd",
+}
+
+type Option = keyof typeof Options;
+
+enum Commands {
+  "import",
+  "convert",
+  "export",
+  "transfer",
+  "port",
+}
+
+type Command = keyof typeof Commands;
+
+const co: any = {};
+co["import"] = ["drupal_pwd", "root_pwd"];
+co["convert"] = ["article_count", "concurrency", "mysql_pwd"];
+co["export"] = ["directus_pwd"];
+co["transfer"] = [...new Set([...co.convert, ...co.export])];
+co["port"] = [...new Set([...co.import, ...co.convert, ...co.export])];
+
+const commandOptions = co as Record<Command, Option[]>;
+
+const optionCommands: Record<Option, Command[]> = Object.keys(Options).reduce(
+  (acc, option) => {
+    acc[option] = Object.keys(commandOptions).filter(key =>
+      commandOptions[key].includes(option)
+    );
+    return acc;
   },
+  {} as Record<Option, Command[]>
+);
+
+interface MyOptionParams
+  extends Pick<OptionParams, "alias" | "default" | "description" | "type"> {
+  alias: string | ReadonlyArray<string>;
+  default: any;
+  description: string;
+  type: "array" | "count" | PositionalOptionsType;
+}
+
+const options: Record<Option, MyOptionParams> = {
+  article_count: {
+    alias: "n",
+    description: "Number of articles to write to import",
+    type: "number",
+    default: undefined,
+  },
+
   concurrency: {
-    concurrency: {
-      alias: "c",
-      description: "Concurrency of article processing",
-      type: "number",
-      default: 10,
-    },
+    alias: "c",
+    description: "Concurrency of asynchronous article processing",
+    type: "number",
+    default: 10,
   },
+
   drupal_pwd: {
-    drupal_pwd: {
-      alias: ["drp", "dru_pwd"],
-      description: "Drupal database password",
-      type: "string",
-      default: null,
-    },
+    alias: ["drp", "dru_pwd"],
+    description: "Drupal database password",
+    type: "string",
+    default: null,
   },
+
   root_pwd: {
-    root_pwd: {
-      alias: "rp",
-      description: "Root user password",
-      type: "string",
-      default: null,
-    },
+    alias: "rp",
+    description: "Root user password",
+    type: "string",
+    default: null,
   },
+
   mysql_pwd: {
-    mysql_pwd: {
-      alias: "mp",
-      description: "Local MySQL password",
-      type: "string",
-      default: null,
-    },
+    alias: "mp",
+    description: "Local MySQL password",
+    type: "string",
+    default: null,
   },
+
   directus_pwd: {
-    directus_pwd: {
-      alias: ["dsp", "dir_pwd"],
-      description: "Directus database password",
-      type: "password",
-      default: null,
-    },
+    alias: ["dsp", "dir_pwd"],
+    description: "Directus database password",
+    type: "string",
+    default: null,
   },
 };
 
-const commands = [
-  {
-    name: "transfer",
+interface CommandParams {
+  aliases: string[];
+  desc: string;
+  args: Record<Option, MyOptionParams>;
+}
+
+function getM2M<
+  K extends Option | Command,
+  BValues extends MyOptionParams | CommandParams,
+  B extends Exclude<Option | Command, K>
+>(key: K, map: Record<K, B[]>, values: Record<B, BValues>): Record<B, BValues> {
+  return map[key].reduce((acc, bkey) => {
+    acc[bkey] = values[bkey];
+    return acc;
+  }, {} as Record<B, BValues>);
+}
+
+const commands: Record<Command, CommandParams> = {
+  transfer: {
     aliases: ["transfer", "$0"],
     desc: "Convert local db data to Directus format and export into Directus",
-    args: {
-      ...options.mysql_pwd,
-      ...options.articleCount,
-      ...options.concurrency,
-      ...options.directus_pwd,
-    },
-    short: "Transfer",
+    args: getM2M("transfer", commandOptions, options),
   },
-  {
-    name: "port",
+  port: {
     aliases: ["port", "full_port"],
     desc: "Full port of data: import from Drupal and export to Directus",
-    args: {
-      ...options.drupal_pwd,
-      ...options.root_pwd,
-      ...options.mysql_pwd,
-      ...options.articleCount,
-      ...options.concurrency,
-      ...options.directus_pwd,
-    },
-    short: "Port",
+    args: getM2M("port", commandOptions, options),
   },
-  {
-    name: "import",
+  import: {
     aliases: ["import", "drupal_import"],
     desc: "Import data from Drupal db to local db",
-    args: {
-      ...options.root_pwd,
-      ...options.drupal_pwd,
-      ...options.mysql_pwd,
-    },
-    short: "Import",
+    args: getM2M("import", commandOptions, options),
   },
-  {
-    name: "convert",
+  convert: {
     aliases: ["convert", "parse"],
     desc:
       "Convert local db data to Directus format. **Does not export into Directus",
-    args: {
-      ...options.mysql_pwd,
-      ...options.articleCount,
-      ...options.concurrency,
-    },
-    short: "Convert",
+    args: getM2M("convert", commandOptions, options),
   },
-  {
-    name: "export",
+  export: {
     aliases: ["export", "export_directus"],
     desc: "Export local SQL file to Directus",
-    args: {
-      ...options.directus_pwd,
-    },
-    short: "Export",
+    args: getM2M("export", commandOptions, options),
   },
-];
+};
 
 async function main(): Promise<void> {
-  commands.forEach(command => {
-    yargs.command(command.aliases, command.desc, command.args);
+  Object.keys(commands).forEach((cKey: Command) => {
+    yargs.command(
+      commands[cKey].aliases,
+      commands[cKey].desc,
+      commands[cKey].args
+    );
   });
 
   const { argv } = yargs.help().alias("help", "h");
 
+  const optionQuestions: DistinctQuestion[] = Object.keys(options).map(
+    (opKey: Option): DistinctQuestion => {
+      const type = opKey.includes("pwd")
+        ? "password"
+        : options[opKey].type === "number"
+        ? "number"
+        : "input";
+      return {
+        name: opKey,
+        message: options[opKey].description,
+        type,
+        mask: type === "password" ? "*" : undefined,
+        when: (answers: Answers): boolean => {
+          if (optionCommands[opKey].includes(answers.command) && !argv[opKey]) {
+            return true;
+          }
+          answers[opKey] = argv[opKey];
+          return false;
+        },
+      };
+    }
+  );
+
   const answers = await inquirer.prompt([
+    ...optionQuestions,
     {
       name: "command",
       message: "What do you want to do?",
       type: "list",
-      choices: commands.map(command => {
-        return {
-          name: `${command.name}: ${command.desc}`,
-          value: command.name,
-          short: command.short,
-        };
-      }),
-      when: (answers): boolean => {
+      choices: Object.keys(commands).map(
+        (cKey: Command): ChoiceOptions => {
+          return {
+            name: `${cKey}: ${commands[cKey].desc}`,
+            value: cKey,
+            short: cKey.charAt(0).toUpperCase() + cKey.slice(1),
+          };
+        }
+      ),
+      when: (answers: Answers): boolean => {
         if (argv._.length !== 0) {
           answers.command = argv._[0];
           return false;
@@ -148,76 +204,17 @@ async function main(): Promise<void> {
         return true;
       },
     },
-    {
-      name: "drupal_pwd",
-      message: "Drupal database password:",
-      type: "password",
-      mask: "*",
-      when: (answers): boolean => {
-        const com = answers.command;
-        if (com === "port" || (com === "import" && !argv.drupal_pwd)) {
-          return true;
-        }
-        answers.drupal_pwd = argv.drupal_pwd;
-        return false;
-      },
-    },
-    {
-      name: "root_pwd",
-      message: "Root user password:",
-      type: "password",
-      mask: "*",
-      when: (answers): boolean => {
-        const com = answers.command;
-        if ((com === "port" || com === "import") && !argv.root_pwd) {
-          return true;
-        }
-        answers.root_pwd = argv.root_pwd;
-        return false;
-      },
-    },
-    {
-      name: "mysql_pwd",
-      message: "Local MySQL password:",
-      type: "password",
-      mask: "*",
-      when: (answers): boolean => {
-        const com = answers.command;
-        if (com !== "export" && !argv.mysql_pwd) {
-          return true;
-        }
-        answers.mysql_pwd = argv.mysql_pwd;
-        return false;
-      },
-    },
-    {
-      name: "directus_pwd",
-      message: "Directus database password:",
-      type: "password",
-      mask: "*",
-      when: (answers): boolean => {
-        const com = answers.command;
-        if (
-          (com === "port" || com === "transfer" || com === "export") &&
-          !argv.directus_pwd
-        ) {
-          return true;
-        }
-        answers.directus_pwd = argv.directus_pwd;
-        return false;
-      },
-    },
   ]);
 
-  switch (answers.command) {
+  switch (answers.command as Command) {
     case "import":
       await exportFromDrupal(answers.drupal_pwd);
       await importToLocal(answers.root_pwd, answers.mysql_pwd);
       break;
     case "convert":
       await convert(
-        argv.articleCount as number,
-        argv.concurrency as number,
+        answers.article_count,
+        answers.concurrency,
         answers.mysql_pwd
       );
       break;
@@ -228,8 +225,8 @@ async function main(): Promise<void> {
       await exportFromDrupal(answers.drupal_pwd);
       await importToLocal(answers.root_pwd, answers.mysql_pwd);
       await convert(
-        argv.articleCount as number,
-        argv.concurrency as number,
+        answers.article_count,
+        answers.concurrency,
         answers.mysql_pwd
       );
       await importToDirectus(answers.directus_pwd);
@@ -237,8 +234,8 @@ async function main(): Promise<void> {
     case "transfer":
     default:
       await convert(
-        argv.articleCount as number,
-        argv.concurrency as number,
+        answers.article_count,
+        answers.concurrency,
         answers.mysql_pwd
       );
       await importToDirectus(answers.directus_pwd);
