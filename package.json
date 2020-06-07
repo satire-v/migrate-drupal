@@ -4,12 +4,15 @@
   "description": "Migrate Satire V Site to Directus",
   "main": "lib/index.js",
   "scripts": {
-    "start": "func() { npm run build && npm run ${1:-run} ./lib/${2:-index}; }; func",
     "build": "tsc",
-    "debug": "node --inspect-brk",
-    "run": "node",
-    "test": "./lib/test.js",
-    "main": "./lib/index.js"
+    "start": "tsc && node ./lib/index.js",
+    "debugmain": "tsc && node --inspect-brk ./lib/index.js",
+    "debugtest": "tsc && node --inspect-brk ./lib/test.js",
+    "runmain": "npm start --",
+    "runtest": "tsc && node ./lib/test.js",
+    "main": "npm start --",
+    "test": "npm run runtest --",
+    "debug": "npm run debugmain --"
   },
   "dependencies": {
     "@directus/sdk-js": "^6.0.5",

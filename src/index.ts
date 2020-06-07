@@ -126,7 +126,7 @@ const commands: Record<Command, CommandParams> = {
   },
   port: {
     aliases: ["port", "full_port"],
-    desc: "Full port of data: import from Drupal and export to Directus",
+    desc: "Full port of data: import from Drupal, convert, then export to Directus",
     args: getM2M("port", commandOptions, options),
   },
   import: {
