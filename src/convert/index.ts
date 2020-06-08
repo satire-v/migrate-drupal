@@ -50,7 +50,7 @@ export async function convert(
   const categoryQuery = directus.categoriesImport(categoryMap);
 
   fs.writeFile(
-    DIRECTUS_IMPORT_FILE,
+    `./sql/${DIRECTUS_IMPORT_FILE}`,
     `${(await categoryQuery) +
       deleteArticles +
       directus.insertArticleStart +

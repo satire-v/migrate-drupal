@@ -2,7 +2,7 @@
 import { IncomingMessage } from "http";
 import { Buffer } from "buffer";
 
-import sharp from "sharp";
+import sharp, { Sharp } from "sharp";
 import Bluebird from "bluebird";
 import axios, { AxiosRequestConfig } from "axios";
 
@@ -25,7 +25,7 @@ export abstract class DrupalImage {
 
   public abstract logName;
   public abstract fileName: string | Promise<string>;
-  public abstract data:
+  public abstract data: () =>
     | Buffer
     | NodeJS.ReadableStream
     | Promise<NodeJS.ReadableStream>;
@@ -59,7 +59,7 @@ class Base64DrupalImage extends DrupalImage {
 
   public logName: string;
   public fileName: string;
-  public data: Buffer | NodeJS.ReadableStream;
+  public data: () => Buffer | NodeJS.ReadableStream;
 
   constructor(srcUri: string, relativePath: string, i: number) {
     super(srcUri, relativePath);
@@ -68,7 +68,7 @@ class Base64DrupalImage extends DrupalImage {
     [, base64src] = base64src.split(",");
     [, fileMimeType] = fileMimeType.split(":");
     [, this._ext] = fileMimeType.split("/");
-    this.data = Buffer.from(base64src, "base64");
+    this.data = (): Buffer => Buffer.from(base64src, "base64");
 
     this.logName = this.fileName = this.resolveDuplicateName(
       `${utils.sanitizePath(this._articlePath).slice(0, 15)}-inline-image-${
@@ -77,8 +77,8 @@ class Base64DrupalImage extends DrupalImage {
     );
 
     if (this._ext === "gif") {
-      this.data = sharp(this.data).png();
-      logger.info(`Converting ${this.logName} from gif to png`);
+      this.data = (): Sharp => sharp(this.data() as Buffer).png();
+      logger.info(`Converting '${this.logName}' from gif to png`);
     }
     this.fileName.replace("gif", "png");
   }
@@ -90,7 +90,7 @@ class FileDrupalImage extends DrupalImage {
 
   public logName: string;
   public fileName: Promise<string>;
-  public data: Promise<NodeJS.ReadableStream>;
+  public data: () => Promise<NodeJS.ReadableStream>;
 
   constructor(srcUri: string, relativePath: string) {
     super(srcUri, relativePath);
@@ -98,11 +98,7 @@ class FileDrupalImage extends DrupalImage {
     this._fullSrcUri = this.getSrcUri();
     this.fileName = this.getFileName().then(res => res.fileName);
     this._ext = this.getFileName().then(res => res.ext);
-    this.data = this.download().catch(err => {
-      logger.warn(`Retrying download for ${this.logName}`);
-      logger.warn(err);
-      throw err;
-    });
+    this.data = this.download;
   }
 
   private getSrcUri(): Promise<string> {
@@ -185,7 +181,7 @@ class FileDrupalImage extends DrupalImage {
     };
   }
 
-  private async download(): Promise<NodeJS.ReadableStream> {
+  public async download(): Promise<NodeJS.ReadableStream> {
     const options: AxiosRequestConfig = {
       responseType: "stream",
       timeout: FILE_TIMEOUT,
@@ -204,13 +200,9 @@ class FileDrupalImage extends DrupalImage {
         }
       );
 
-    reqStream
-      .on("error", () => {
-        logger.warn(`Error on download for ${this.logName}`);
-      })
-      .on("close", () => {
-        logger.debug(`Download ended for ${this.logName}`);
-      });
+    reqStream.on("close", () => {
+      logger.debug(`Download ended for ${this.logName}`);
+    });
 
     let data: NodeJS.ReadableStream = reqStream;
 

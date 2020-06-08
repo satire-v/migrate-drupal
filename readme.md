@@ -9,10 +9,10 @@ Dear god I can't believe I'm writing this
 I've set it up so it's pretty simple to run either the main script or the test file (for random experiments), with normal node or debug node. The usage is:
 
 ```
-npm [run] start <debug | run><test | main> [-- [<params>]
+npm [run] start <mode><script> [-- [params]]
 ```
 
-`run` and `main` are selected by default, so `npm start` is equivalent to `npm start runmain`.
+where `mode` is one of `debug` or `run`, and script is one of `main` or `test`. `run` and `main` are the defaults, so `npm start` is equivalent to `npm start runmain`.
 
 You can also run `npm run build` to compile.
 

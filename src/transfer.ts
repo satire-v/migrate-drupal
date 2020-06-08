@@ -51,7 +51,10 @@ export async function exportFromDrupal(drpualPwd: string): Promise<void> {
   // again... GoDaddy sux
   await retry(
     async () =>
-      await ssh.getFile(`../${DRUPAL_DATABASE}.sql`, `${DRUPAL_DATABASE}.sql`),
+      await ssh.getFile(
+        `./sql/${DRUPAL_DATABASE}.sql`,
+        `${DRUPAL_DATABASE}.sql`
+      ),
     {
       throw_original: true,
       max_tries: 10,
@@ -94,7 +97,7 @@ export async function importToLocal(
   utils.handleShellReturn(returns);
 
   returns = child_process.spawnSync(
-    `mysql -u root -p${mysqlPwd} ${DRUPAL_DATABASE}<${DRUPAL_DATABASE}.sql`,
+    `mysql -u root -p${mysqlPwd} ${DRUPAL_DATABASE}<sql/${DRUPAL_DATABASE}.sql`,
     [],
     { shell: true, stdio: ["inherit", "inherit", "pipe"], encoding: "utf-8" }
   );
@@ -115,7 +118,10 @@ export async function importToDirectus(directusPwd: string): Promise<void> {
     username: "jacob",
     privateKey: os.homedir() + "/.ssh/id_rsa",
   });
-  await ssh.putFile(`../${DIRECTUS_IMPORT_FILE}`, `${DIRECTUS_IMPORT_FILE}`);
+  await ssh.putFile(
+    `../sql/${DIRECTUS_IMPORT_FILE}`,
+    `${DIRECTUS_IMPORT_FILE}`
+  );
   const returns = await ssh.execCommand(
     `mysql -p${directusPwd} -h localhost -u satirev ${DIRECTUS_DATABASE} < ${DIRECTUS_IMPORT_FILE}`
   );

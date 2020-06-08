@@ -96,7 +96,7 @@ class Directus {
       imageID: number;
     }>(
       async () => {
-        const data = await image.data; // Download part
+        const data = await image.data(); // Download part
         if (!data) {
           return null;
         }

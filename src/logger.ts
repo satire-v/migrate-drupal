@@ -23,12 +23,12 @@ winston.loggers.add("logger", {
   format: defaultFormat,
   transports: [
     new winston.transports.File({
-      filename: "../logs/combined.log",
+      filename: "./logs/combined.log",
       level: "info",
       // handleExceptions: true,
     }),
     new winston.transports.File({
-      filename: "../logs/debug.log",
+      filename: "./logs/debug.log",
       level: "debug",
     }),
     new winston.transports.Console({

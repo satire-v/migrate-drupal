@@ -3,6 +3,7 @@ import yargs, { Options as OptionParams, PositionalOptionsType } from "yargs";
 import inquirer, { ChoiceOptions, DistinctQuestion, Answers } from "inquirer";
 
 import { exportFromDrupal, importToLocal, importToDirectus } from "./transfer";
+import logger from "./logger";
 import { convert } from "./convert";
 
 export const DRUPAL_DATABASE = "satirevdrupal";
@@ -31,7 +32,7 @@ enum Commands {
 type Command = keyof typeof Commands;
 
 const co: Record<string, string[]> = {};
-co["import"] = ["drupal_pwd", "root_pwd"];
+co["import"] = ["drupal_pwd", "root_pwd", "mysql_pwd"];
 co["convert"] = ["article_count", "concurrency", "mysql_pwd"];
 co["export"] = ["directus_pwd"];
 co["transfer"] = [...new Set([...co.convert, ...co.export])];
@@ -69,7 +70,7 @@ const options: Record<Option, MyOptionParams> = {
     alias: "c",
     description: "Concurrency of asynchronous article processing",
     type: "number",
-    default: 10,
+    default: null,
   },
 
   drupal_pwd: {
@@ -126,7 +127,8 @@ const commands: Record<Command, CommandParams> = {
   },
   port: {
     aliases: ["port", "full_port"],
-    desc: "Full port of data: import from Drupal, convert, then export to Directus",
+    desc:
+      "Full port of data: import from Drupal, convert, then export to Directus",
     args: getM2M("port", commandOptions, options),
   },
   import: {
@@ -171,18 +173,28 @@ async function main(): Promise<void> {
         type,
         mask: type === "password" ? "*" : undefined,
         when: (answers: Answers): boolean => {
-          if (optionCommands[opKey].includes(answers.command) && !argv[opKey]) {
-            return true;
+          if (!optionCommands[opKey].includes(answers.command)) {
+            return false;
           }
-          answers[opKey] = argv[opKey];
-          return false;
+          if (argv[opKey]) {
+            console.log(
+              "\x1b[32m%s\x1b[0m",
+              `${opKey}: ${
+                opKey.includes("pwd")
+                  ? (argv[opKey] as string).replace(/./g, "*")
+                  : argv[opKey]
+              }`
+            );
+            answers[opKey] = argv[opKey];
+            return false;
+          }
+          return true;
         },
       };
     }
   );
 
   const answers = await inquirer.prompt([
-    ...optionQuestions,
     {
       name: "command",
       message: "What do you want to do?",
@@ -199,12 +211,22 @@ async function main(): Promise<void> {
       when: (answers: Answers): boolean => {
         if (argv._.length !== 0) {
           answers.command = argv._[0];
+          console.log("\x1b[32m%s\x1b[0m", `Command: ${answers.command}`);
           return false;
         }
         return true;
       },
     },
+    ...optionQuestions,
   ]);
+
+  for (const option in commandOptions[answers.command as Command]) {
+    if (option === "" || option == null) {
+      const err = `Option ${option} is required for command ${answers.command} but wasn't provided`;
+      logger.error(err);
+      throw new Error(err);
+    }
+  }
 
   switch (answers.command as Command) {
     case "import":
