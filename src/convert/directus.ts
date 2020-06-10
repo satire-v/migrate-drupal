@@ -5,6 +5,7 @@ import mysql2 from "mysql2";
 import FormData from "form-data";
 import retry from "bluebird-retry";
 import Bluebird from "bluebird";
+import { AxiosError } from "axios";
 import { IFileResponse } from "@directus/sdk-js/dist/types/schemes/response/File";
 import { AuthModes } from "@directus/sdk-js/dist/types/Authentication";
 import SDK from "@directus/sdk-js";
@@ -14,7 +15,7 @@ import progress from "../progress";
 import logger from "../logger";
 
 import { DrupalImage } from "./drupal/image";
-import type { Article, CategoryMap } from "./drupal/article";
+import { Article, CategoryMap } from "./drupal/article";
 
 export const sdk = new SDK({
   mode: "cookie" as AuthModes,
@@ -90,7 +91,7 @@ class Directus {
 
   public async uploadImage<T extends DrupalImage>(
     image: T
-  ): Promise<{ directusUri: string; imageID: number }> {
+  ): Promise<{ directusUri: string | null; imageID: number | null }> {
     const res = await retry<{
       directusUri: string;
       imageID: number;
@@ -106,17 +107,19 @@ class Directus {
         form.append("filename_disk", fileName);
         form.append("data", data, fileName);
 
-        logger.debug(`Trying to upload ${image.logName}`);
+        logger.debug(`Trying to upload '${image.logName}'`);
 
         const content: IFileResponse = await this.sdk.api
           .request("post", "/files", {}, form, false, { ...form.getHeaders() })
           .catch(e => {
-            logger.warn(`Failed an upload attempt ${image.logName}; Retrying`);
+            logger.warn(
+              `Failed an upload attempt '${image.logName}'; Retrying`
+            );
             logger.warn(e);
             throw e;
           })
           .then(res => {
-            logger.debug(`Upload succeeeded for ${image.logName}`);
+            logger.debug(`Upload succeeeded for '${image.logName}'`);
             return res;
           });
         return {
@@ -124,11 +127,20 @@ class Directus {
           imageID: content.data.id,
         };
       },
-      { throw_original: true }
-    ).catch(err => {
-      logger.error(`Coundn't transfer file ${image.logName}`);
-      logger.error(err);
-      throw err;
+      {
+        throw_original: true,
+        predicate: (error: AxiosError) => {
+          return error.response?.status !== 404;
+        },
+      }
+    ).catch((err: AxiosError) => {
+      if (err.response?.status === 404) {
+        logger.error(`'${image.logName}' gave a 404. Moving on`);
+      } else {
+        logger.error(`Couldn't transfer file '${image.logName}'`);
+        logger.error(err);
+        throw err;
+      }
     });
 
     const index = DrupalImage.filesLeft.indexOf(image.logName);
@@ -136,13 +148,14 @@ class Directus {
       DrupalImage.filesLeft.splice(index, 1);
     }
     progress.incFilesBar();
+    if (!res) {
+      return { directusUri: null, imageID: null };
+    }
     return res;
   }
 
   /* The big one. Creates the SQL query to insert an article, all of the fields */
-  public async createArticleImportQuery(
-    article: Article
-  ): Promise<string> {
+  public async createArticleImportQuery(article: Article): Promise<string> {
     // Drupal stores as binary 1/0
     const pub = article.status ? "published" : "draft";
     const created = utils.unixToSQLDate(article.created);
@@ -158,9 +171,12 @@ class Directus {
     });
     // keep old slug for backwards compatibility
     const legacySlug = mysql2.escape(article.relative_path);
-    const body = mysql2.escape(await article.body);
+    const body = mysql2.escape(await article.body());
 
-    const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${await article.image_id}, ${caption}, ${teaser}, ${await article.category_id}, '${newSlug}', ${legacySlug})`;
+    const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${(await article.image_id()) ??
+      ""}, ${caption}, ${teaser}, ${
+      article.category_id
+    }, '${newSlug}', ${legacySlug})`;
     // Done with this article's processing
     progress.incArticlesBar();
     return values;

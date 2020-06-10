@@ -44,11 +44,11 @@ export class Article {
   public created: number;
   public changed: number;
   public status: 0 | 1;
-  public body: Promise<string>;
+  public body: () => Promise<string>;
   public caption: string;
-  public category_id: Promise<number>;
+  public category_id: number;
   public teaser: string;
-  public image_id: Promise<number> | null;
+  public image_id: () => Promise<number | null> | null;
   public relative_path: string;
   public tags_info: string;
 
@@ -72,13 +72,14 @@ export class Article {
     this.relative_path = relative_path;
     this.tags_info = article.tags_info;
 
-    this.body = this.genProcessBody(body, relative_path);
-    this.category_id = this.genCategoryID(category_id, category_name);
+    this.body = (): Promise<string> => this.genProcessBody(body, relative_path);
+    this.category_id = this.getCategoryID(category_id, category_name);
     if (!image_uri) {
-      this.image_id = null;
+      this.image_id = (): null => null;
     } else {
-      const image = newImage(image_uri, relative_path);
-      this.image_id = directus.uploadImage(image).then(res => res.imageID);
+      const image = newImage(encodeURI(image_uri), relative_path);
+      this.image_id = async (): Promise<number | null> =>
+        directus.uploadImage(image).then(res => res.imageID);
     }
   }
 
@@ -236,10 +237,10 @@ export class Article {
     return res2;
   }
 
-  private async genCategoryID(
+  private getCategoryID(
     category_id: number | null,
     category_name: string | null
-  ): Promise<number> {
+  ): number {
     if (!category_name || !category_id) {
       return this.categoryMap["Everything Else"];
     }

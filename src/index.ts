@@ -176,7 +176,7 @@ async function main(): Promise<void> {
           if (!optionCommands[opKey].includes(answers.command)) {
             return false;
           }
-          if (argv[opKey]) {
+          if (argv[opKey] !== null && argv[opKey] !== undefined) {
             console.log(
               "\x1b[32m%s\x1b[0m",
               `${opKey}: ${

@@ -23,11 +23,11 @@ export function handleShellReturn(returns: {
   [key: string]: any;
 }): void {
   const err = returns.stderr;
-  if (
-    err === "" ||
-    err ===
-      "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
-  ) {
+  err.replace(
+    "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+    ""
+  );
+  if (err === "") {
     return;
   } else {
     logger.error(err);

@@ -39,8 +39,8 @@ winston.loggers.add("logger", {
 });
 try {
   // Reset logs
-  fs.unlinkSync("../logs/combined.log");
-  fs.unlinkSync("../logs/debug.log");
+  fs.unlinkSync("./logs/combined.log");
+  fs.unlinkSync("./logs/debug.log");
 } catch {
   // do nothing
 }

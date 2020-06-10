@@ -1,7 +1,7 @@
-import logger from "./logger";
+import Bluebird from "bluebird";
+import axios from "axios";
+
 // import { sdk } from "./convert/directus";
 
-const test = (): void => {
-  logger.info("TEST");
-};
+const test = async (): Promise<void> => {};
 test();

@@ -1,16 +1,30 @@
 /* eslint-disable @typescript-eslint/camelcase */
-import { IncomingMessage } from "http";
+import https from "https";
+import http, { IncomingMessage } from "http";
 import { Buffer } from "buffer";
 
 import sharp, { Sharp } from "sharp";
+import retry from "bluebird-retry";
 import Bluebird from "bluebird";
-import axios, { AxiosRequestConfig } from "axios";
+import axios, { AxiosRequestConfig, AxiosError } from "axios";
 
 import { FILE_TIMEOUT } from "../index";
 import * as utils from "../../utils";
 import progress from "../../progress";
 import logger from "../../logger";
 const MB = 1024 * 1024;
+
+const axiosInstance = axios.create({
+  //60 sec timeout
+  timeout: 60000,
+
+  //keepAlive pools and reuses TCP connections, so it's faster
+  httpAgent: new http.Agent({ keepAlive: true }),
+  httpsAgent: new https.Agent({ keepAlive: true }),
+
+  //follow up to 10 HTTP 3xx redirects
+  maxRedirects: 10,
+});
 
 export abstract class DrupalImage {
   public static filesTotal = 0;
@@ -40,7 +54,7 @@ export abstract class DrupalImage {
   protected resolveDuplicateName(logName: string): string {
     let res = logName;
     if (DrupalImage.files.includes(logName)) {
-      logger.error(`Duplicate name: ${logName}`);
+      logger.warn(`Duplicate name: '${logName}'`);
 
       res = logName.replace(
         /\.[^.]+$/,
@@ -70,7 +84,7 @@ class Base64DrupalImage extends DrupalImage {
     [, this._ext] = fileMimeType.split("/");
     this.data = (): Buffer => Buffer.from(base64src, "base64");
 
-    this.logName = this.fileName = this.resolveDuplicateName(
+    this.fileName = this.logName = this.resolveDuplicateName(
       `${utils.sanitizePath(this._articlePath).slice(0, 15)}-inline-image-${
         this._i
       }.${this._ext}`
@@ -79,8 +93,8 @@ class Base64DrupalImage extends DrupalImage {
     if (this._ext === "gif") {
       this.data = (): Sharp => sharp(this.data() as Buffer).png();
       logger.info(`Converting '${this.logName}' from gif to png`);
+      this.fileName = this.fileName.replace("gif", "png");
     }
-    this.fileName.replace("gif", "png");
   }
 }
 
@@ -96,8 +110,9 @@ class FileDrupalImage extends DrupalImage {
     super(srcUri, relativePath);
     this.logName = this.resolveDuplicateName(utils.getFileNameFromUri(srcUri));
     this._fullSrcUri = this.getSrcUri();
-    this.fileName = this.getFileName().then(res => res.fileName);
-    this._ext = this.getFileName().then(res => res.ext);
+    const res = this.getFileName();
+    this.fileName = res.then(r => r.fileName);
+    this._ext = res.then(r => r.ext);
     this.data = this.download;
   }
 
@@ -125,25 +140,39 @@ class FileDrupalImage extends DrupalImage {
   private async genFirstValidUri(): Promise<string> {
     const uris = FileDrupalImage.getHostedImageUris(this._srcUri);
     let fullUri: string | null = null;
-    let foundIt = false;
-    await Bluebird.mapSeries(uris, async uri => {
-      if (foundIt) return false;
-      await axios.head(uri).then(
-        res => {
-          foundIt = true;
-          fullUri = uri;
-          return res.headers;
+    await Bluebird.each(uris, async uri => {
+      await retry(
+        async () => {
+          await axiosInstance.head(uri).then(
+            () => {
+              fullUri = uri;
+              throw new Error("Found it");
+            },
+            err => {
+              logger.debug(`Test for ${uri} failed`);
+              logger.debug(err);
+            }
+          );
         },
-        () => {
-          // logger.debug(`Test for ${uri} failed`);
-          // logger.debug(err);
-          return false;
+        {
+          throw_original: true,
+          predicate: (e: AxiosError) => {
+            if (e.message !== "Found it") {
+              logger.error(e);
+              return e.name === "ENOTFOUND";
+            }
+          },
         }
-      );
-    });
+      ).catch(e => {
+        if (e.message !== "Found it") {
+          logger.error(e);
+        }
+        throw e;
+      });
+    }).catch(() => {});
     if (!fullUri) {
-      logger.warn(`No valid uri for ${uris}`);
-      throw new Error(`No valid uri found for ${this.logName}`);
+      logger.error(`No valid uri from '${uris}'`);
+      throw new Error(`No valid uri found for '${this.logName}'`);
     }
 
     return fullUri;
@@ -161,7 +190,7 @@ class FileDrupalImage extends DrupalImage {
     }
     if (ext === null) {
       // logger.debug(`Getting headers for ${this.logName}`);
-      const headers = await axios.head(await this._fullSrcUri).then(
+      const headers = await axiosInstance.head(await this._fullSrcUri).then(
         res => res.headers,
         err => {
           // logger.warn(`Error getting headers for ${this.logName}`);
@@ -187,21 +216,19 @@ class FileDrupalImage extends DrupalImage {
       timeout: FILE_TIMEOUT,
     };
 
-    logger.debug(`Trying to download ${this.logName}`);
+    logger.debug(`Trying to download '${this.logName}'`);
 
-    const reqStream: IncomingMessage = await axios
+    const reqStream: IncomingMessage = await axiosInstance
       .get(await this._fullSrcUri, options)
-      .then(
-        res => res.data,
-        e => {
-          logger.warn(`Failed download: ${this.logName}`);
-          logger.warn(e);
-          throw e;
-        }
-      );
+      .catch(e => {
+        logger.warn(`Failed download: '${this.logName}'`);
+        logger.warn(e);
+        throw e;
+      })
+      .then(res => res.data);
 
     reqStream.on("close", () => {
-      logger.debug(`Download ended for ${this.logName}`);
+      logger.debug(`Download ended for '${this.logName}'`);
     });
 
     let data: NodeJS.ReadableStream = reqStream;
@@ -210,7 +237,7 @@ class FileDrupalImage extends DrupalImage {
       const transformer = sharp().png();
       data = reqStream.pipe(transformer);
 
-      logger.info(`Converting ${this.logName} from gif to png`);
+      logger.info(`Converting '${this.logName}' from gif to png`);
       this.fileName = this.fileName.then(fileName =>
         fileName.replace(".gif", ".png")
       );
@@ -222,7 +249,10 @@ class FileDrupalImage extends DrupalImage {
       const transformer = sharp().resize(1000);
       data = reqStream.pipe(transformer);
       logger.info(
-        `Resizing ${this.logName} from ${reqStream.headers["content-length"]}`
+        `Resizing '${this.logName}' from ${parseInt(
+          reqStream.headers["content-length"],
+          10
+        ) / MB} MB`
       );
     }
 
