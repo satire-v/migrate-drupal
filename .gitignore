@@ -1,1 +1,8 @@
+**/node_modules/*
+**/lib/*
+**/sql/*
 *.sql
+**/logs/*
+*.log
+.vscode/*
+**/.DS_Store/*
