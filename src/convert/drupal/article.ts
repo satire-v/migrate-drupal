@@ -7,7 +7,7 @@ import Bluebird from "bluebird";
 import directus from "../directus";
 import logger from "../../logger";
 
-import { newImage } from "./image";
+import { newImage, DrupalImage } from "./image";
 
 export interface CategoryMap {
   [name: string]: number;
@@ -48,7 +48,7 @@ export class Article {
   public caption: string;
   public category_id: number;
   public teaser: string;
-  public image_id: () => Promise<number | null> | null;
+  public image_id: () => Promise<number | null> | null | number;
   public relative_path: string;
   public tags_info: string;
 
@@ -76,10 +76,15 @@ export class Article {
     this.category_id = this.getCategoryID(category_id, category_name);
     if (!image_uri) {
       this.image_id = (): null => null;
+    } else if (image_uri in DrupalImage.files) {
+      this.image_id = () =>
+        DrupalImage.files[image_uri].directusInfo?.imageID ?? null;
     } else {
       const image = newImage(encodeURI(image_uri), relative_path);
       this.image_id = async (): Promise<number | null> =>
-        directus.uploadImage(image).then(res => res.imageID);
+        directus
+          .uploadImage(image)
+          .then(res => res.directusInfo?.imageID ?? null);
     }
   }
 
@@ -217,13 +222,20 @@ export class Article {
         $(el).remove();
         return;
       }
-      const image = newImage(src, relativePath, this._i);
-      this._i++;
-      const res = await directus.uploadImage(image);
-      if (res.directusUri == null) {
+      let res: DrupalImage;
+      if (src in DrupalImage.files) {
+        res = DrupalImage.files[src];
+      } else {
+        const image = newImage(src, relativePath, this._i);
+        this._i++;
+        res = await directus.uploadImage(image);
+      }
+      const uri = res?.directusInfo?.directusUri;
+      if (uri == null) {
         return;
       }
-      $(el).attr("src", res.directusUri);
+
+      $(el).attr("src", uri);
     });
     return $.html();
   }

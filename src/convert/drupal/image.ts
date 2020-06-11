@@ -28,12 +28,13 @@ const axiosInstance = axios.create({
 
 export abstract class DrupalImage {
   public static filesTotal = 0;
-  public static files: string[] = [];
-  public static filesLeft: string[] = [];
+  public static files: { [srcUri: string]: DrupalImage } = {};
+  public static filesLeft: { [srcUri: string]: DrupalImage } = {};
   private _id: number;
 
-  protected _srcUri: string;
+  public _srcUri: string;
   protected _articlePath: string;
+  public directusInfo: { imageID: number; directusUri: string } | null;
 
   protected abstract _ext;
 
@@ -49,11 +50,17 @@ export abstract class DrupalImage {
     this._articlePath = relativePath;
     DrupalImage.filesTotal++;
     this._id = progress.FilesBarTotal = DrupalImage.filesTotal;
+    DrupalImage.files[this._srcUri] = this;
+    this.directusInfo = null;
   }
 
   protected resolveDuplicateName(logName: string): string {
     let res = logName;
-    if (DrupalImage.files.includes(logName)) {
+    if (
+      Object.values(DrupalImage.files).filter(
+        o => o !== this && o.logName === logName
+      ).length !== 0
+    ) {
       logger.warn(`Duplicate name: '${logName}'`);
 
       res = logName.replace(
@@ -61,8 +68,6 @@ export abstract class DrupalImage {
         (match: string) => `${this._id}${match}`
       );
     }
-    DrupalImage.files.push(res);
-    DrupalImage.filesLeft.push(res);
     return res;
   }
 }
@@ -151,23 +156,27 @@ class FileDrupalImage extends DrupalImage {
             err => {
               logger.debug(`Test for ${uri} failed`);
               logger.debug(err);
+              throw err;
             }
           );
         },
         {
           throw_original: true,
           predicate: (e: AxiosError) => {
-            if (e.message !== "Found it") {
+            if (
+              e.message !== "Found it" &&
+              e.response?.status &&
+              (e.response?.status < 400 || e.response?.status > 500)
+            ) {
               logger.error(e);
               return e.name === "ENOTFOUND";
             }
           },
         }
       ).catch(e => {
-        if (e.message !== "Found it") {
-          logger.error(e);
+        if (e.message === "Found it") {
+          throw e;
         }
-        throw e;
       });
     }).catch(() => {});
     if (!fullUri) {

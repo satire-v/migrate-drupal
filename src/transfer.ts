@@ -118,13 +118,13 @@ export async function importToDirectus(directusPwd: string): Promise<void> {
     username: "jacob",
     privateKey: os.homedir() + "/.ssh/id_rsa",
   });
-  await ssh.putFile(
-    `../sql/${DIRECTUS_IMPORT_FILE}`,
-    `${DIRECTUS_IMPORT_FILE}`
-  );
+  await ssh.putFile(`./sql/${DIRECTUS_IMPORT_FILE}`, `${DIRECTUS_IMPORT_FILE}`);
+  logger.info("Import copied...");
   const returns = await ssh.execCommand(
-    `mysql -p${directusPwd} -h localhost -u satirev ${DIRECTUS_DATABASE} < ${DIRECTUS_IMPORT_FILE}`
+    `mysql -p${directusPwd} -h localhost -u satirev ${DIRECTUS_DATABASE} < ${DIRECTUS_IMPORT_FILE}`,
+    { cwd: "./" }
   );
   utils.handleShellReturn(returns);
+  ssh.dispose();
   logger.info("DONE IMPORTING TO DIRECTUS\n");
 }

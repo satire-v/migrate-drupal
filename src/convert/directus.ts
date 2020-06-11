@@ -89,9 +89,7 @@ class Directus {
     logger.info("Deleted existing images");
   }
 
-  public async uploadImage<T extends DrupalImage>(
-    image: T
-  ): Promise<{ directusUri: string | null; imageID: number | null }> {
+  public async uploadImage<T extends DrupalImage>(image: T): Promise<T> {
     const res = await retry<{
       directusUri: string;
       imageID: number;
@@ -143,15 +141,12 @@ class Directus {
       }
     });
 
-    const index = DrupalImage.filesLeft.indexOf(image.logName);
-    if (index > -1) {
-      DrupalImage.filesLeft.splice(index, 1);
-    }
+    delete DrupalImage.filesLeft[image._srcUri];
     progress.incFilesBar();
-    if (!res) {
-      return { directusUri: null, imageID: null };
+    if (res) {
+      image.directusInfo = res;
     }
-    return res;
+    return image;
   }
 
   /* The big one. Creates the SQL query to insert an article, all of the fields */
@@ -174,7 +169,7 @@ class Directus {
     const body = mysql2.escape(await article.body());
 
     const values = `('${pub}', 1, 1, '${created}', '${changed}', ${title}, ${body}, ${tags}, ${(await article.image_id()) ??
-      ""}, ${caption}, ${teaser}, ${
+      null}, ${caption}, ${teaser}, ${
       article.category_id
     }, '${newSlug}', ${legacySlug})`;
     // Done with this article's processing
