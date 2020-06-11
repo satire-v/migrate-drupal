@@ -77,7 +77,7 @@ export class Article {
     if (!image_uri) {
       this.image_id = (): null => null;
     } else if (image_uri in DrupalImage.files) {
-      this.image_id = () =>
+      this.image_id = (): number | null =>
         DrupalImage.files[image_uri].directusInfo?.imageID ?? null;
     } else {
       const image = newImage(encodeURI(image_uri), relative_path);
