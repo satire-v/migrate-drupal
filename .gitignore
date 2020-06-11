@@ -1,7 +1,8 @@
-*.sql
 **/node_modules/*
 **/lib/*
+**/sql/*
+*.sql
 **/logs/*
-.vscode/*
 *.log
+.vscode/*
 **/.DS_Store/*
